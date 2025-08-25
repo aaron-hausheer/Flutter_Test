@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 const String SUPABASE_URL = 'https://qjojmiexgnxmibqcblqj.supabase.co';
-const String SUPABASE_ANON_KEY =
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqb2ptaWV4Z254bWlicWNibHFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYwMzQwNzksImV4cCI6MjA3MTYxMDA3OX0.CQv4sm0uDUSrFRoiroaUKUXIQuq-uoCyZCx-95uYw-Y';
+const String SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqb2ptaWV4Z254bWlicWNibHFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYwMzQwNzksImV4cCI6MjA3MTYxMDA3OX0.CQv4sm0uDUSrFRoiroaUKUXIQuq-uoCyZCx-95uYw-Y';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,7 +12,6 @@ void main() async {
 
 class CrudApp extends StatelessWidget {
   const CrudApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -49,20 +47,13 @@ class Note {
   final String content;
   final DateTime createdAt;
 
-  const Note({
-    required this.id,
-    required this.title,
-    required this.content,
-    required this.createdAt,
-  });
+  const Note({required this.id, required this.title, required this.content, required this.createdAt});
 
   factory Note.fromMap(Map<String, dynamic> m) {
     final int id = (m['id'] as num).toInt();
     final String title = (m['title'] as String?) ?? '';
     final String content = (m['content'] as String?) ?? '';
-    final DateTime createdAt = DateTime.parse(
-      (m['created_at'] as String?) ?? DateTime.now().toIso8601String(),
-    );
+    final DateTime createdAt = DateTime.parse((m['created_at'] as String?) ?? DateTime.now().toIso8601String());
     return Note(id: id, title: title, content: content, createdAt: createdAt);
   }
 }
@@ -74,7 +65,20 @@ class NoteListPage extends StatefulWidget {
 }
 
 class _NoteListPageState extends State<NoteListPage> {
+  final TextEditingController _searchCtrl = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
+  bool _sortDesc = true;
+  bool _selectionMode = false;
+  final Set<int> _selectedIds = <int>{};
+  Note? _lastDeleted;
   SupabaseClient get _sb => Supabase.instance.client;
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _searchFocus.dispose();
+    super.dispose();
+  }
 
   Future<void> _create(String title, String content) async {
     await _sb.from('notes').insert(<String, dynamic>{'title': title, 'content': content});
@@ -85,15 +89,28 @@ class _NoteListPageState extends State<NoteListPage> {
   }
 
   Future<void> _delete(int id) async {
-    await _sb.from('notes').delete().eq('id', id);
+    final PostgrestFilterBuilder<dynamic> q = _sb.from('notes').delete().eq('id', id);
+    await q;
+  }
+
+  Future<void> _deleteMany(Iterable<int> ids) async {
+    if (ids.isEmpty) return;
+    await _sb.from('notes').delete().inFilter('id', ids.toList());
+  }
+
+  Future<void> _duplicate(Note n) async {
+    await _create(n.title, n.content);
   }
 
   Stream<List<Note>> _noteStream() {
-    final Stream<List<Map<String, dynamic>>> s = _sb
-        .from('notes')
-        .stream(primaryKey: <String>['id'])
-        .order('created_at', ascending: false);
+    final Stream<List<Map<String, dynamic>>> s = _sb.from('notes').stream(primaryKey: <String>['id']).order('created_at', ascending: !_sortDesc);
     return s.map((List<Map<String, dynamic>> rows) => rows.map((Map<String, dynamic> m) => Note.fromMap(m)).toList());
+  }
+
+  List<Note> _applyClientFilters(List<Note> all) {
+    final String q = _searchCtrl.text.trim().toLowerCase();
+    if (q.isEmpty) return all;
+    return all.where((Note n) => n.title.toLowerCase().contains(q) || n.content.toLowerCase().contains(q)).toList();
   }
 
   String _formatDate(DateTime dt) {
@@ -110,11 +127,7 @@ class _NoteListPageState extends State<NoteListPage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (BuildContext c) => NoteEditorSheet(
-        initialTitle: '',
-        initialContent: '',
-        isEditing: false,
-      ),
+      builder: (BuildContext c) => NoteEditorSheet(initialTitle: '', initialContent: '', isEditing: false),
     );
     if (r == null) return;
     if (!r.isDelete) {
@@ -127,86 +140,321 @@ class _NoteListPageState extends State<NoteListPage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      builder: (BuildContext c) => NoteEditorSheet(
-        initialTitle: note.title,
-        initialContent: note.content,
-        isEditing: true,
-      ),
+      builder: (BuildContext c) => NoteEditorSheet(initialTitle: note.title, initialContent: note.content, isEditing: true),
     );
     if (r == null) return;
     if (r.isDelete) {
+      final bool confirm = await _confirmDelete(count: 1);
+      if (!confirm) return;
+      setState(() => _lastDeleted = note);
       await _delete(note.id);
+      _showUndoSnackbar(<Note>[note]);
     } else {
       await _update(note.id, r.title, r.content);
     }
   }
 
-  Widget _noteCard(BuildContext context, Note note) {
-    return Card(
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        title: Text(
-          note.title.isEmpty ? 'Ohne Titel' : note.title,
-          style: Theme.of(context).textTheme.titleMedium,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
+  Future<bool> _confirmDelete({required int count}) async {
+    final bool? ok = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext c) {
+        return AlertDialog(
+          title: Text(count == 1 ? 'Notiz löschen?' : '$count Notizen löschen?'),
+          content: Text(count == 1 ? 'Diese Aktion kann nicht rückgängig gemacht werden.' : 'Diese Aktion kann nicht rückgängig gemacht werden.'),
+          actions: <Widget>[
+            TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text('Abbrechen')),
+            FilledButton.tonal(onPressed: () => Navigator.of(c).pop(true), child: const Text('Löschen')),
+          ],
+        );
+      },
+    );
+    return ok ?? false;
+  }
+
+  void _toggleSelectionMode([bool? enable]) {
+    setState(() {
+      _selectionMode = enable ?? !_selectionMode;
+      if (!_selectionMode) _selectedIds.clear();
+    });
+  }
+
+  void _toggleSelected(int id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  Future<void> _deleteSelected(List<Note> visible) async {
+    if (_selectedIds.isEmpty) return;
+    final bool ok = await _confirmDelete(count: _selectedIds.length);
+    if (!ok) return;
+    final List<Note> toDelete = visible.where((Note n) => _selectedIds.contains(n.id)).toList();
+    setState(() => _lastDeleted = toDelete.isNotEmpty ? toDelete.first : null);
+    await _deleteMany(_selectedIds);
+    _toggleSelectionMode(false);
+    _showUndoSnackbar(toDelete);
+  }
+
+  void _showUndoSnackbar(List<Note> deleted) {
+    if (deleted.isEmpty) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(deleted.length == 1 ? 'Notiz gelöscht' : '${deleted.length} Notizen gelöscht'),
+        action: SnackBarAction(
+          label: 'Rückgängig',
+          onPressed: () async {
+            for (final Note n in deleted) {
+              await _create(n.title, n.content);
+            }
+          },
         ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 8),
+      ),
+    );
+  }
+
+  Future<void> _openSettings() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (BuildContext c) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                note.content.isEmpty ? 'Ohne Inhalt' : note.content,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              ListTile(
+                leading: const Icon(Icons.swap_vert),
+                title: const Text('Sortierung'),
+                subtitle: Text(_sortDesc ? 'Neueste zuerst' : 'Älteste zuerst'),
+                onTap: () {
+                  setState(() => _sortDesc = !_sortDesc);
+                  Navigator.of(c).pop();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.select_all),
+                title: const Text('Mehrfachauswahl'),
+                trailing: Switch(value: _selectionMode, onChanged: (bool v) => setState(() => _selectionMode = v)),
+                onTap: () {
+                  _toggleSelectionMode();
+                  Navigator.of(c).pop();
+                },
               ),
               const SizedBox(height: 8),
-              Text(
-                _formatDate(note.createdAt),
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: TextField(
+        controller: _searchCtrl,
+        focusNode: _searchFocus,
+        decoration: InputDecoration(
+          hintText: 'Suchen...',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _searchCtrl.text.isEmpty
+              ? null
+              : IconButton(
+                  onPressed: () {
+                    _searchCtrl.clear();
+                    setState(() {});
+                  },
+                  icon: const Icon(Icons.clear),
+                ),
         ),
-        trailing: IconButton(
-          icon: const Icon(Icons.delete),
-          onPressed: () => _delete(note.id),
-        ),
-        onTap: () => _openEditSheet(note),
+        onChanged: (String _) => setState(() {}),
+        textInputAction: TextInputAction.search,
       ),
+    );
+  }
+
+  Widget _noteTile(Note note) {
+    final bool selected = _selectedIds.contains(note.id);
+    return GestureDetector(
+      onLongPress: () => _toggleSelectionMode(true),
+      child: Card(
+        child: ListTile(
+          leading: _selectionMode
+              ? Checkbox(
+                  value: selected,
+                  onChanged: (bool? v) => _toggleSelected(note.id),
+                )
+              : null,
+          contentPadding: const EdgeInsets.all(16),
+          title: Text(
+            note.title.isEmpty ? 'Ohne Titel' : note.title,
+            style: Theme.of(context).textTheme.titleMedium,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  note.content.isEmpty ? 'Ohne Inhalt' : note.content,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                Text(_formatDate(note.createdAt), style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
+          ),
+          trailing: PopupMenuButton<String>(
+            onSelected: (String v) async {
+              if (v == 'open') {
+                await Navigator.of(context).push(MaterialPageRoute(builder: (BuildContext c) => NoteDetailPage(note: note)));
+              } else if (v == 'edit') {
+                await _openEditSheet(note);
+              } else if (v == 'dup') {
+                await _duplicate(note);
+              } else if (v == 'del') {
+                final bool ok = await _confirmDelete(count: 1);
+                if (!ok) return;
+                setState(() => _lastDeleted = note);
+                await _delete(note.id);
+                _showUndoSnackbar(<Note>[note]);
+              }
+            },
+            itemBuilder: (BuildContext c) => <PopupMenuEntry<String>>[
+              const PopupMenuItem<String>(value: 'open', child: ListTile(leading: Icon(Icons.open_in_new), title: Text('Öffnen'))),
+              const PopupMenuItem<String>(value: 'edit', child: ListTile(leading: Icon(Icons.edit), title: Text('Bearbeiten'))),
+              const PopupMenuItem<String>(value: 'dup', child: ListTile(leading: Icon(Icons.copy), title: Text('Duplizieren'))),
+              const PopupMenuItem<String>(value: 'del', child: ListTile(leading: Icon(Icons.delete), title: Text('Löschen'))),
+            ],
+          ),
+          onTap: () {
+            if (_selectionMode) {
+              _toggleSelected(note.id);
+            } else {
+              _openEditSheet(note);
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(List<Note> visible) {
+    if (_selectionMode) {
+      return AppBar(
+        title: Text('${_selectedIds.length} ausgewählt'),
+        leading: IconButton(onPressed: () => _toggleSelectionMode(false), icon: const Icon(Icons.close)),
+        actions: <Widget>[
+          IconButton(
+            onPressed: () => _deleteSelected(visible),
+            icon: const Icon(Icons.delete),
+          ),
+        ],
+      );
+    }
+    return AppBar(
+      title: const Text('Notizen'),
+      actions: <Widget>[
+        IconButton(onPressed: _openSettings, icon: const Icon(Icons.tune)),
+        IconButton(
+          onPressed: () {
+            setState(() => _sortDesc = !_sortDesc);
+          },
+          icon: Icon(_sortDesc ? Icons.arrow_downward : Icons.arrow_upward),
+          tooltip: _sortDesc ? 'Neueste zuerst' : 'Älteste zuerst',
+        ),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    return StreamBuilder<List<Note>>(
+      stream: _noteStream(),
+      builder: (BuildContext context, AsyncSnapshot<List<Note>> snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(appBar: _buildAppBar(const <Note>[]), body: const Center(child: CircularProgressIndicator()));
+        }
+        if (snapshot.hasError) {
+          return Scaffold(appBar: _buildAppBar(const <Note>[]), body: Center(child: Text('Fehler: ${snapshot.error}')));
+        }
+        final List<Note> notes = snapshot.data ?? <Note>[];
+        final List<Note> visible = _applyClientFilters(notes);
+        return Scaffold(
+          appBar: _buildAppBar(visible),
+          floatingActionButton: FloatingActionButton.extended(
+            onPressed: _openCreateSheet,
+            icon: const Icon(Icons.add),
+            label: const Text('Neu'),
+          ),
+          body: Column(
+            children: <Widget>[
+              _buildSearchBar(),
+              if (visible.isEmpty)
+                const Expanded(child: Center(child: Text('Keine Notizen')))
+              else
+                Expanded(
+                  child: RefreshIndicator(
+                    onRefresh: () async {
+                      final PostgrestTransformBuilder<dynamic> q = _sb.from('notes').select().limit(1);
+                      await q;
+                    },
+                    child: ListView.builder(
+                      itemCount: visible.length,
+                      itemBuilder: (BuildContext context, int i) => _noteTile(visible[i]),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class NoteDetailPage extends StatelessWidget {
+  final Note note;
+  const NoteDetailPage({super.key, required this.note});
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Notizen')),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openCreateSheet,
-        icon: const Icon(Icons.add),
-        label: const Text('Neu'),
-      ),
-      body: StreamBuilder<List<Note>>(
-        stream: _noteStream(),
-        builder: (BuildContext context, AsyncSnapshot<List<Note>> snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Fehler: ${snapshot.error}'));
-          }
-          final List<Note> notes = snapshot.data ?? <Note>[];
-          if (notes.isEmpty) {
-            return const Center(child: Text('Keine Notizen'));
-          }
-          return ListView.builder(
-            itemCount: notes.length,
-            itemBuilder: (BuildContext context, int i) => _noteCard(context, notes[i]),
-          );
-        },
+      appBar: AppBar(title: const Text('Notiz')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            SelectableText(note.title.isEmpty ? 'Ohne Titel' : note.title, style: Theme.of(context).textTheme.headlineSmall),
+            const SizedBox(height: 12),
+            Text(_formatDateStatic(note.createdAt), style: Theme.of(context).textTheme.bodySmall),
+            const Divider(height: 24),
+            Expanded(
+              child: SingleChildScrollView(
+                child: SelectableText(note.content.isEmpty ? 'Ohne Inhalt' : note.content, style: Theme.of(context).textTheme.bodyLarge),
+              ),
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  static String _formatDateStatic(DateTime dt) {
+    final String y = dt.year.toString().padLeft(4, '0');
+    final String m = dt.month.toString().padLeft(2, '0');
+    final String d = dt.day.toString().padLeft(2, '0');
+    final String hh = dt.hour.toString().padLeft(2, '0');
+    final String mm = dt.minute.toString().padLeft(2, '0');
+    return '$d.$m.$y, $hh:$mm';
   }
 }
 
@@ -221,12 +469,7 @@ class NoteEditorSheet extends StatefulWidget {
   final String initialTitle;
   final String initialContent;
   final bool isEditing;
-  const NoteEditorSheet({
-    super.key,
-    required this.initialTitle,
-    required this.initialContent,
-    required this.isEditing,
-  });
+  const NoteEditorSheet({super.key, required this.initialTitle, required this.initialContent, required this.isEditing});
   @override
   State<NoteEditorSheet> createState() => _NoteEditorSheetState();
 }
@@ -246,6 +489,7 @@ class _NoteEditorSheetState extends State<NoteEditorSheet> {
   @override
   Widget build(BuildContext context) {
     final EdgeInsets viewInsets = EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom);
+    final int chars = _contentCtrl.text.characters.length;
     return Padding(
       padding: viewInsets,
       child: Padding(
@@ -267,8 +511,9 @@ class _NoteEditorSheetState extends State<NoteEditorSheet> {
               ),
               TextFormField(
                 controller: _contentCtrl,
-                decoration: const InputDecoration(labelText: 'Inhalt'),
+                decoration: InputDecoration(labelText: 'Inhalt', helperText: '$chars Zeichen'),
                 maxLines: 8,
+                onChanged: (String _) => setState(() {}),
               ),
               const SizedBox(height: 8),
               Row(
@@ -276,29 +521,20 @@ class _NoteEditorSheetState extends State<NoteEditorSheet> {
                   if (widget.isEditing)
                     FilledButton.tonalIcon(
                       onPressed: () {
-                        Navigator.of(context).pop(
-                          const NoteEditorResult(title: '', content: '', isDelete: true),
-                        );
+                        Navigator.of(context).pop(const NoteEditorResult(title: '', content: '', isDelete: true));
                       },
                       icon: const Icon(Icons.delete),
                       label: const Text('Löschen'),
                     ),
                   const Spacer(),
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    child: const Text('Abbrechen'),
-                  ),
+                  TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Abbrechen')),
                   const SizedBox(width: 8),
                   FilledButton.icon(
                     onPressed: () {
                       final bool ok = _formKey.currentState?.validate() ?? false;
                       if (!ok) return;
                       Navigator.of(context).pop(
-                        NoteEditorResult(
-                          title: _titleCtrl.text.trim(),
-                          content: _contentCtrl.text.trim(),
-                          isDelete: false,
-                        ),
+                        NoteEditorResult(title: _titleCtrl.text.trim(), content: _contentCtrl.text.trim(), isDelete: false),
                       );
                     },
                     icon: const Icon(Icons.check),
@@ -313,319 +549,3 @@ class _NoteEditorSheetState extends State<NoteEditorSheet> {
     );
   }
 }
-
-
-
-
-
-
-// import 'package:flutter/material.dart';
-// import 'package:supabase_flutter/supabase_flutter.dart';
-
-// const String SUPABASE_URL = 'https://qjojmiexgnxmibqcblqj.supabase.co';
-// const String SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqb2ptaWV4Z254bWlicWNibHFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYwMzQwNzksImV4cCI6MjA3MTYxMDA3OX0.CQv4sm0uDUSrFRoiroaUKUXIQuq-uoCyZCx-95uYw-Y';
-
-// void main() async {
-//   WidgetsFlutterBinding.ensureInitialized();
-//   await Supabase.initialize(url: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY);
-//   runApp(const CrudApp());
-// }
-
-// class CrudApp extends StatelessWidget {
-//   const CrudApp({super.key});
-//   @override
-//   Widget build(BuildContext context) {
-//     return MaterialApp(
-//       title: 'CRUD Demo',
-//       theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.blue),
-//       home: const NoteListPage(),
-//     );
-//   }
-// }
-
-// class Note {
-//   final int id;
-//   final String title;
-//   final String content;
-//   final DateTime createdAt;
-//   const Note({required this.id, required this.title, required this.content, required this.createdAt});
-//   factory Note.fromMap(Map<String, dynamic> m) {
-//     final int id = (m['id'] as num).toInt();
-//     final String title = (m['title'] as String?) ?? '';
-//     final String content = (m['content'] as String?) ?? '';
-//     final DateTime createdAt = DateTime.parse((m['created_at'] as String?) ?? DateTime.now().toIso8601String());
-//     return Note(id: id, title: title, content: content, createdAt: createdAt);
-//   }
-//   Map<String, dynamic> toMap() {
-//     return <String, dynamic>{
-//       'id': id,
-//       'title': title,
-//       'content': content,
-//       'created_at': createdAt.toIso8601String(),
-//     };
-//   }
-//   Note copyWith({int? id, String? title, String? content, DateTime? createdAt}) {
-//     return Note(
-//       id: id ?? this.id,
-//       title: title ?? this.title,
-//       content: content ?? this.content,
-//       createdAt: createdAt ?? this.createdAt,
-//     );
-//   }
-// }
-
-// class NoteListPage extends StatefulWidget {
-//   const NoteListPage({super.key});
-//   @override
-//   State<NoteListPage> createState() => _NoteListPageState();
-// }
-
-// class _NoteListPageState extends State<NoteListPage> {
-//   SupabaseClient get _sb => Supabase.instance.client;
-
-//   Future<void> _create(String title, String content) async {
-//     await _sb.from('notes').insert(<String, dynamic>{'title': title, 'content': content});
-//   }
-
-//   Future<void> _update(Note note, String title, String content) async {
-//     await _sb.from('notes').update(<String, dynamic>{'title': title, 'content': content}).eq('id', note.id);
-//   }
-
-//   Future<void> _delete(int id) async {
-//     await _sb.from('notes').delete().eq('id', id);
-//   }
-
-//   Stream<List<Note>> _noteStream() {
-//     final Stream<List<Map<String, dynamic>>> s = _sb
-//         .from('notes')
-//         .stream(primaryKey: <String>['id'])
-//         .order('created_at', ascending: false);
-//     return s.map((List<Map<String, dynamic>> rows) => rows.map((Map<String, dynamic> m) => Note.fromMap(m)).toList());
-//   }
-
-//   Future<void> _openEditor({Note? note}) async {
-//     final NoteEditorResult? result = await showModalBottomSheet<NoteEditorResult>(
-//       context: context,
-//       isScrollControlled: true,
-//       builder: (BuildContext context) {
-//         return NoteEditorSheet(
-//           initialTitle: note?.title ?? '',
-//           initialContent: note?.content ?? '',
-//           isEditing: note != null,
-//         );
-//       },
-//     );
-//     if (!mounted) return;
-//     if (result == null) return;
-//     if (result.isDelete && note != null) {
-//       await _delete(note.id);
-//       return;
-//     }
-//     if (note == null) {
-//       await _create(result.title, result.content);
-//     } else {
-//       await _update(note, result.title, result.content);
-//     }
-//   }
-
-//   void _openDetails(Note note) {
-//     Navigator.of(context).push(MaterialPageRoute<Widget>(
-//       builder: (BuildContext context) {
-//         return NoteDetailPage(
-//           note: note,
-//           onEdit: () => _openEditor(note: note),
-//           onDelete: () async {
-//             await _delete(note.id);
-//             if (mounted) Navigator.of(context).pop();
-//           },
-//         );
-//       },
-//     ));
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(title: const Text('Notizen')),
-//       body: StreamBuilder<List<Note>>(
-//         stream: _noteStream(),
-//         builder: (BuildContext context, AsyncSnapshot<List<Note>> snapshot) {
-//           if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
-//           if (snapshot.hasError) return Center(child: Text('Fehler: ${snapshot.error}'));
-//           final List<Note> notes = snapshot.data ?? <Note>[];
-//           if (notes.isEmpty) return const Center(child: Text('Keine Notizen'));
-//           return ListView.builder(
-//             itemCount: notes.length,
-//             itemBuilder: (BuildContext context, int index) {
-//               final Note note = notes[index];
-//               return Dismissible(
-//                 key: ValueKey<int>(note.id),
-//                 direction: DismissDirection.endToStart,
-//                 onDismissed: (DismissDirection d) async {
-//                   await _delete(note.id);
-//                 },
-//                 background: Container(
-//                   alignment: Alignment.centerRight,
-//                   padding: const EdgeInsets.symmetric(horizontal: 16),
-//                   color: Theme.of(context).colorScheme.errorContainer,
-//                   child: Icon(Icons.delete, color: Theme.of(context).colorScheme.onErrorContainer),
-//                 ),
-//                 child: ListTile(
-//                   title: Text(note.title.isEmpty ? 'Ohne Titel' : note.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-//                   subtitle: Text(note.content.isEmpty ? 'Ohne Inhalt' : note.content, maxLines: 2, overflow: TextOverflow.ellipsis),
-//                   onTap: () => _openDetails(note),
-//                   trailing: IconButton(icon: const Icon(Icons.edit), onPressed: () => _openEditor(note: note)),
-//                 ),
-//               );
-//             },
-//           );
-//         },
-//       ),
-//       floatingActionButton: FloatingActionButton.extended(
-//         onPressed: () => _openEditor(),
-//         icon: const Icon(Icons.add),
-//         label: const Text('Neu'),
-//       ),
-//     );
-//   }
-// }
-
-// class NoteDetailPage extends StatelessWidget {
-//   final Note note;
-//   final VoidCallback onEdit;
-//   final VoidCallback onDelete;
-//   const NoteDetailPage({super.key, required this.note, required this.onEdit, required this.onDelete});
-
-//   String _formatDate(DateTime dt) {
-//     final String y = dt.year.toString().padLeft(4, '0');
-//     final String m = dt.month.toString().padLeft(2, '0');
-//     final String d = dt.day.toString().padLeft(2, '0');
-//     final String hh = dt.hour.toString().padLeft(2, '0');
-//     final String mm = dt.minute.toString().padLeft(2, '0');
-//     return '$d.$m.$y, $hh:$mm';
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(
-//         title: const Text('Details'),
-//         actions: <Widget>[
-//           IconButton(onPressed: onEdit, icon: const Icon(Icons.edit)),
-//           IconButton(onPressed: onDelete, icon: const Icon(Icons.delete)),
-//         ],
-//       ),
-//       body: Padding(
-//         padding: const EdgeInsets.all(16),
-//         child: Column(
-//           crossAxisAlignment: CrossAxisAlignment.start,
-//           children: <Widget>[
-//             Text(note.title.isEmpty ? 'Ohne Titel' : note.title, style: Theme.of(context).textTheme.headlineSmall),
-//             const SizedBox(height: 8),
-//             Text('Erstellt: ${_formatDate(note.createdAt)}', style: Theme.of(context).textTheme.bodySmall),
-//             const Divider(height: 24),
-//             Expanded(
-//               child: SingleChildScrollView(
-//                 child: Text(note.content.isEmpty ? 'Ohne Inhalt' : note.content, style: Theme.of(context).textTheme.bodyLarge),
-//               ),
-//             ),
-//           ],
-//         ),
-//       ),
-//     );
-//   }
-// }
-
-// class NoteEditorResult {
-//   final String title;
-//   final String content;
-//   final bool isDelete;
-//   const NoteEditorResult({required this.title, required this.content, required this.isDelete});
-// }
-
-// class NoteEditorSheet extends StatefulWidget {
-//   final String initialTitle;
-//   final String initialContent;
-//   final bool isEditing;
-//   const NoteEditorSheet({super.key, required this.initialTitle, required this.initialContent, required this.isEditing});
-//   @override
-//   State<NoteEditorSheet> createState() => _NoteEditorSheetState();
-// }
-
-// class _NoteEditorSheetState extends State<NoteEditorSheet> {
-//   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-//   late final TextEditingController _titleCtrl = TextEditingController(text: widget.initialTitle);
-//   late final TextEditingController _contentCtrl = TextEditingController(text: widget.initialContent);
-
-//   @override
-//   void dispose() {
-//     _titleCtrl.dispose();
-//     _contentCtrl.dispose();
-//     super.dispose();
-//   }
-
-//   @override
-//   Widget build(BuildContext context) {
-//     final EdgeInsets viewInsets = MediaQuery.of(context).viewInsets;
-//     return Padding(
-//       padding: EdgeInsets.only(bottom: viewInsets.bottom),
-//       child: Padding(
-//         padding: const EdgeInsets.all(16),
-//         child: Form(
-//           key: _formKey,
-//           child: Wrap(
-//             runSpacing: 12,
-//             children: <Widget>[
-//               Text(widget.isEditing ? 'Notiz bearbeiten' : 'Neue Notiz', style: Theme.of(context).textTheme.titleLarge),
-//               TextFormField(
-//                 controller: _titleCtrl,
-//                 decoration: const InputDecoration(labelText: 'Titel'),
-//                 validator: (String? v) {
-//                   if (v == null) return 'Pflichtfeld';
-//                   if (v.trim().isEmpty) return 'Pflichtfeld';
-//                   return null;
-//                 },
-//                 textInputAction: TextInputAction.next,
-//               ),
-//               TextFormField(
-//                 controller: _contentCtrl,
-//                 decoration: const InputDecoration(labelText: 'Inhalt'),
-//                 maxLines: 8,
-//               ),
-//               const SizedBox(height: 8),
-//               Row(
-//                 children: <Widget>[
-//                   if (widget.isEditing)
-//                     FilledButton.tonalIcon(
-//                       onPressed: () {
-//                         Navigator.of(context).pop(NoteEditorResult(title: _titleCtrl.text.trim(), content: _contentCtrl.text.trim(), isDelete: true));
-//                       },
-//                       icon: const Icon(Icons.delete),
-//                       label: const Text('Löschen'),
-//                     ),
-//                   const Spacer(),
-//                   TextButton(
-//                     onPressed: () {
-//                       Navigator.of(context).pop();
-//                     },
-//                     child: const Text('Abbrechen'),
-//                   ),
-//                   const SizedBox(width: 8),
-//                   FilledButton.icon(
-//                     onPressed: () {
-//                       final bool ok = _formKey.currentState?.validate() ?? false;
-//                       if (!ok) return;
-//                       Navigator.of(context).pop(NoteEditorResult(title: _titleCtrl.text.trim(), content: _contentCtrl.text.trim(), isDelete: false));
-//                     },
-//                     icon: const Icon(Icons.check),
-//                     label: Text(widget.isEditing ? 'Speichern' : 'Erstellen'),
-//                   ),
-//                 ],
-//               ),
-//             ],
-//           ),
-//         ),
-//       ),
-//     );
-//   }
-// }
