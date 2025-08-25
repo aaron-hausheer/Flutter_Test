@@ -18,32 +18,34 @@ class GroupsService {
     final String uid = _sb.auth.currentUser!.id;
     final List<dynamic> res = await _sb
         .from('groups')
-        .select('id, name, created_at')
+        .select('id, name, color_hex, created_at')
         .eq('user_id', uid)
         .order('created_at', ascending: false);
-    final List<Group> list = res.map((dynamic r) {
-      final Map<String, dynamic> m = r as Map<String, dynamic>;
-      return Group.fromMap(m);
-    }).toList();
+    final List<Group> list = res.map((dynamic r) => Group.fromMap(r as Map<String, dynamic>)).toList();
     return list;
   }
 
-  Future<Group> createAndReturn(String name) async {
+  Future<Group> createAndReturn(String name, String colorHex) async {
     final String uid = _sb.auth.currentUser!.id;
-    final List<dynamic> rows =
-        await _sb.from('groups').insert(<String, dynamic>{'name': name, 'user_id': uid}).select();
-    final Map<String, dynamic> m =
-        rows.isNotEmpty ? rows.first as Map<String, dynamic> : <String, dynamic>{};
+    final List<dynamic> rows = await _sb
+        .from('groups')
+        .insert(<String, dynamic>{'name': name, 'user_id': uid, 'color_hex': colorHex})
+        .select();
+    final Map<String, dynamic> m = rows.first as Map<String, dynamic>;
     return Group.fromMap(m);
   }
 
-  Future<void> create(String name) async {
+  Future<void> create(String name, String colorHex) async {
     final String uid = _sb.auth.currentUser!.id;
-    await _sb.from('groups').insert(<String, dynamic>{'name': name, 'user_id': uid});
+    await _sb.from('groups').insert(<String, dynamic>{'name': name, 'user_id': uid, 'color_hex': colorHex});
   }
 
   Future<void> rename(int id, String name) async {
     await _sb.from('groups').update(<String, dynamic>{'name': name}).eq('id', id);
+  }
+
+  Future<void> recolor(int id, String colorHex) async {
+    await _sb.from('groups').update(<String, dynamic>{'color_hex': colorHex}).eq('id', id);
   }
 
   Future<void> delete(int id) async {

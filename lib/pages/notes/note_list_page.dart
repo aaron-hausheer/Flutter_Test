@@ -58,23 +58,83 @@ class _NoteListPageState extends State<NoteListPage> {
     return '$d.$m.$y, $hh:$mm';
   }
 
+  Color _parseHexColor(String hex) {
+    String h = hex.trim();
+    if (h.startsWith('#')) h = h.substring(1);
+    if (h.length == 6) h = 'FF$h';
+    final int v = int.parse(h, radix: 16);
+    return Color(int.parse('0x$v'));
+  }
+
+  Color _tileColorFor(int? groupId) {
+    if (groupId == null) return const Color(0xFFFFF59D);
+    for (final Group g in _groupsCache) {
+      if (g.id == groupId) return _parseHexColor(g.colorHex);
+    }
+    return const Color(0xFFFFF59D);
+  }
+
   Future<void> _createGroupDialog() async {
+    final List<String> palette = <String>[
+      '#FFF59D',
+      '#FFE082',
+      '#FFCC80',
+      '#FFAB91',
+      '#E1BEE7',
+      '#BBDEFB',
+      '#B2DFDB',
+      '#C8E6C9'
+    ];
     final TextEditingController ctrl = TextEditingController();
-    final String? name = await showDialog<String>(
+    final String? result = await showDialog<String>(
       context: context,
       builder: (BuildContext c) {
-        return AlertDialog(
-          title: const Text('Neue Gruppe'),
-          content: TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'Name')),
-          actions: <Widget>[
-            TextButton(onPressed: () => Navigator.of(c).pop(null), child: const Text('Abbrechen')),
-            FilledButton(onPressed: () => Navigator.of(c).pop(ctrl.text.trim()), child: const Text('Erstellen')),
-          ],
+        int sel = 0;
+        return StatefulBuilder(
+          builder: (BuildContext c, StateSetter setS) {
+            return AlertDialog(
+              title: const Text('Neue Gruppe'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'Name')),
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: List<Widget>.generate(palette.length, (int i) {
+                      final bool selected = sel == i;
+                      return InkWell(
+                        onTap: () => setS(() => sel = i),
+                        child: Container(
+                          width: 28,
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: _parseHexColor(palette[i]),
+                            shape: BoxShape.circle,
+                            border: Border.all(width: selected ? 3 : 1, color: selected ? Colors.black87 : Colors.black26),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ],
+              ),
+              actions: <Widget>[
+                TextButton(onPressed: () => Navigator.of(c).pop(null), child: const Text('Abbrechen')),
+                FilledButton(onPressed: () => Navigator.of(c).pop('${ctrl.text.trim()}|${palette[sel]}'), child: const Text('Erstellen')),
+              ],
+            );
+          },
         );
       },
     );
-    if (name == null || name.isEmpty) return;
-    final Group g = await _groups.createAndReturn(name);
+    if (result == null || result.isEmpty) return;
+    final List<String> parts = result.split('|');
+    if (parts.isEmpty || parts.first.isEmpty) return;
+    final String name = parts.first;
+    final String hex = parts.length > 1 ? parts.last : '#FFF59D';
+    final Group g = await _groups.createAndReturn(name, hex);
     setState(() => _selectedGroupId = g.id);
   }
 
@@ -116,7 +176,6 @@ class _NoteListPageState extends State<NoteListPage> {
     if (r.isDelete) {
       final bool confirm = await _confirmDelete(count: 1);
       if (!confirm) return;
-      setState(() => _lastDeleted = note);
       await _notes.delete(note.id);
       _showUndoSnackbar(<Note>[note]);
     } else {
@@ -163,7 +222,6 @@ class _NoteListPageState extends State<NoteListPage> {
     final bool ok = await _confirmDelete(count: _selectedIds.length);
     if (!ok) return;
     final List<Note> toDelete = visible.where((Note n) => _selectedIds.contains(n.id)).toList();
-    setState(() => _lastDeleted = toDelete.isNotEmpty ? toDelete.first : null);
     await _notes.deleteMany(_selectedIds);
     _toggleSelectionMode(false);
     _showUndoSnackbar(toDelete);
@@ -268,13 +326,14 @@ class _NoteListPageState extends State<NoteListPage> {
       itemBuilder: (BuildContext context, int i) {
         final Note n = notes[i];
         final bool selected = _selectedIds.contains(n.id);
+        final Color tileColor = _tileColorFor(n.groupId);
         return StickyNoteTile(
           title: n.title,
           content: n.content,
           footer: _formatDate(n.createdAt),
           selectionMode: _selectionMode,
           selected: selected,
-          colorIndex: n.id,
+          tileColor: tileColor,
           onTap: () {
             if (_selectionMode) {
               _toggleSelected(n.id);
@@ -291,7 +350,6 @@ class _NoteListPageState extends State<NoteListPage> {
           onDelete: () async {
             final bool ok = await _confirmDelete(count: 1);
             if (!ok) return;
-            setState(() => _lastDeleted = n);
             await _notes.delete(n.id);
             _showUndoSnackbar(<Note>[n]);
           },

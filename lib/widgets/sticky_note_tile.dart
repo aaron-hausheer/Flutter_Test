@@ -12,7 +12,7 @@ class StickyNoteTile extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDuplicate;
   final VoidCallback onDelete;
-  final int colorIndex;
+  final Color tileColor;
 
   const StickyNoteTile({
     super.key,
@@ -27,20 +27,19 @@ class StickyNoteTile extends StatelessWidget {
     required this.onEdit,
     required this.onDuplicate,
     required this.onDelete,
-    required this.colorIndex,
+    required this.tileColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    const Color bg = Color(0xFFFFF59D);
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
       child: Transform.rotate(
-        angle: selectionMode ? 0 : ((colorIndex % 5) - 2) * 0.0025,
+        angle: selectionMode ? 0 : (((title.hashCode % 5) - 2) * 0.0025),
         child: Container(
           decoration: BoxDecoration(
-            color: bg,
+            color: tileColor,
             borderRadius: BorderRadius.circular(16),
             boxShadow: <BoxShadow>[
               BoxShadow(
