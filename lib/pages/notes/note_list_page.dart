@@ -8,6 +8,7 @@ import '../../widgets/search_bar.dart';
 import '../../widgets/note_editor_sheet.dart';
 import '../../widgets/admin_drawer.dart';
 import '../../widgets/group_filter_bar.dart';
+import '../../widgets/sticky_note_tile.dart';
 import 'note_detail_page.dart';
 
 class NoteListPage extends StatefulWidget {
@@ -249,72 +250,53 @@ class _NoteListPageState extends State<NoteListPage> {
     );
   }
 
-  Widget _noteTile(Note note) {
-    final bool selected = _selectedIds.contains(note.id);
-    return GestureDetector(
-      onLongPress: () => _toggleSelectionMode(true),
-      child: Card(
-        child: ListTile(
-          leading: _selectionMode
-              ? Checkbox(
-                  value: selected,
-                  onChanged: (bool? v) => _toggleSelected(note.id),
-                )
-              : null,
-          contentPadding: const EdgeInsets.all(16),
-          title: Text(
-            note.title.isEmpty ? 'Ohne Titel' : note.title,
-            style: Theme.of(context).textTheme.titleMedium,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  note.content.isEmpty ? 'Ohne Inhalt' : note.content,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 8),
-                Text(_formatDate(note.createdAt), style: Theme.of(context).textTheme.bodySmall),
-              ],
-            ),
-          ),
-          trailing: PopupMenuButton<String>(
-            onSelected: (String v) async {
-              if (v == 'open') {
-                await Navigator.of(context).push(MaterialPageRoute(builder: (BuildContext c) => NoteDetailPage(note: note)));
-              } else if (v == 'edit') {
-                await _openEditSheet(note);
-              } else if (v == 'dup') {
-                await _notes.duplicate(note);
-              } else if (v == 'del') {
-                final bool ok = await _confirmDelete(count: 1);
-                if (!ok) return;
-                setState(() => _lastDeleted = note);
-                await _notes.delete(note.id);
-                _showUndoSnackbar(<Note>[note]);
-              }
-            },
-            itemBuilder: (BuildContext c) => <PopupMenuEntry<String>>[
-              const PopupMenuItem<String>(value: 'open', child: ListTile(leading: Icon(Icons.open_in_new), title: Text('Öffnen'))),
-              const PopupMenuItem<String>(value: 'edit', child: ListTile(leading: Icon(Icons.edit), title: Text('Bearbeiten'))),
-              const PopupMenuItem<String>(value: 'dup', child: ListTile(leading: Icon(Icons.copy), title: Text('Duplizieren'))),
-              const PopupMenuItem<String>(value: 'del', child: ListTile(leading: Icon(Icons.delete), title: Text('Löschen'))),
-            ],
-          ),
+  Widget _grid(BuildContext context, List<Note> notes) {
+    final double w = MediaQuery.of(context).size.width;
+    int cols = (w / 220).floor();
+    if (cols < 2) cols = 2;
+    if (cols > 6) cols = 6;
+
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: cols,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.9,
+      ),
+      itemCount: notes.length,
+      itemBuilder: (BuildContext context, int i) {
+        final Note n = notes[i];
+        final bool selected = _selectedIds.contains(n.id);
+        return StickyNoteTile(
+          title: n.title,
+          content: n.content,
+          footer: _formatDate(n.createdAt),
+          selectionMode: _selectionMode,
+          selected: selected,
+          colorIndex: n.id,
           onTap: () {
             if (_selectionMode) {
-              _toggleSelected(note.id);
+              _toggleSelected(n.id);
             } else {
-              _openEditSheet(note);
+              _openEditSheet(n);
             }
           },
-        ),
-      ),
+          onLongPress: () => _toggleSelectionMode(true),
+          onOpen: () async {
+            await Navigator.of(context).push(MaterialPageRoute(builder: (BuildContext c) => NoteDetailPage(note: n)));
+          },
+          onEdit: () => _openEditSheet(n),
+          onDuplicate: () async => _notes.duplicate(n),
+          onDelete: () async {
+            final bool ok = await _confirmDelete(count: 1);
+            if (!ok) return;
+            setState(() => _lastDeleted = n);
+            await _notes.delete(n.id);
+            _showUndoSnackbar(<Note>[n]);
+          },
+        );
+      },
     );
   }
 
@@ -386,10 +368,7 @@ class _NoteListPageState extends State<NoteListPage> {
                       onRefresh: () async {
                         await _notes.refreshTick();
                       },
-                      child: ListView.builder(
-                        itemCount: visible.length,
-                        itemBuilder: (BuildContext context, int i) => _noteTile(visible[i]),
-                      ),
+                      child: _grid(context, visible),
                     ),
                   );
                 },
