@@ -34,7 +34,8 @@ class CrudApp extends StatelessWidget {
         ),
         inputDecorationTheme: const InputDecorationTheme(
           border: OutlineInputBorder(
-              borderRadius: BorderRadius.all(Radius.circular(14))),
+            borderRadius: BorderRadius.all(Radius.circular(14)),
+          ),
         ),
       ),
       home: const NoteListPage(),
@@ -48,18 +49,20 @@ class Note {
   final String content;
   final DateTime createdAt;
 
-  const Note(
-      {required this.id,
-      required this.title,
-      required this.content,
-      required this.createdAt});
+  const Note({
+    required this.id,
+    required this.title,
+    required this.content,
+    required this.createdAt,
+  });
 
   factory Note.fromMap(Map<String, dynamic> m) {
     final int id = (m['id'] as num).toInt();
     final String title = (m['title'] as String?) ?? '';
     final String content = (m['content'] as String?) ?? '';
     final DateTime createdAt = DateTime.parse(
-        (m['created_at'] as String?) ?? DateTime.now().toIso8601String());
+      (m['created_at'] as String?) ?? DateTime.now().toIso8601String(),
+    );
     return Note(id: id, title: title, content: content, createdAt: createdAt);
   }
 }
@@ -74,8 +77,11 @@ class _NoteListPageState extends State<NoteListPage> {
   SupabaseClient get _sb => Supabase.instance.client;
 
   Future<void> _create(String title, String content) async {
-    await _sb.from('notes')
-        .insert(<String, dynamic>{'title': title, 'content': content});
+    await _sb.from('notes').insert(<String, dynamic>{'title': title, 'content': content});
+  }
+
+  Future<void> _update(int id, String title, String content) async {
+    await _sb.from('notes').update(<String, dynamic>{'title': title, 'content': content}).eq('id', id);
   }
 
   Future<void> _delete(int id) async {
@@ -83,21 +89,56 @@ class _NoteListPageState extends State<NoteListPage> {
   }
 
   Stream<List<Note>> _noteStream() {
-    final s = _sb
+    final Stream<List<Map<String, dynamic>>> s = _sb
         .from('notes')
         .stream(primaryKey: <String>['id'])
         .order('created_at', ascending: false);
-    return s.map((rows) =>
-        rows.map((Map<String, dynamic> m) => Note.fromMap(m)).toList());
+    return s.map((List<Map<String, dynamic>> rows) => rows.map((Map<String, dynamic> m) => Note.fromMap(m)).toList());
   }
 
   String _formatDate(DateTime dt) {
-    final y = dt.year.toString().padLeft(4, '0');
-    final m = dt.month.toString().padLeft(2, '0');
-    final d = dt.day.toString().padLeft(2, '0');
-    final hh = dt.hour.toString().padLeft(2, '0');
-    final mm = dt.minute.toString().padLeft(2, '0');
+    final String y = dt.year.toString().padLeft(4, '0');
+    final String m = dt.month.toString().padLeft(2, '0');
+    final String d = dt.day.toString().padLeft(2, '0');
+    final String hh = dt.hour.toString().padLeft(2, '0');
+    final String mm = dt.minute.toString().padLeft(2, '0');
     return '$d.$m.$y, $hh:$mm';
+  }
+
+  Future<void> _openCreateSheet() async {
+    final NoteEditorResult? r = await showModalBottomSheet<NoteEditorResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (BuildContext c) => NoteEditorSheet(
+        initialTitle: '',
+        initialContent: '',
+        isEditing: false,
+      ),
+    );
+    if (r == null) return;
+    if (!r.isDelete) {
+      await _create(r.title, r.content);
+    }
+  }
+
+  Future<void> _openEditSheet(Note note) async {
+    final NoteEditorResult? r = await showModalBottomSheet<NoteEditorResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (BuildContext c) => NoteEditorSheet(
+        initialTitle: note.title,
+        initialContent: note.content,
+        isEditing: true,
+      ),
+    );
+    if (r == null) return;
+    if (r.isDelete) {
+      await _delete(note.id);
+    } else {
+      await _update(note.id, r.title, r.content);
+    }
   }
 
   Widget _noteCard(BuildContext context, Note note) {
@@ -132,6 +173,7 @@ class _NoteListPageState extends State<NoteListPage> {
           icon: const Icon(Icons.delete),
           onPressed: () => _delete(note.id),
         ),
+        onTap: () => _openEditSheet(note),
       ),
     );
   }
@@ -141,26 +183,26 @@ class _NoteListPageState extends State<NoteListPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Notizen')),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _create("Neue Notiz", ""),
+        onPressed: _openCreateSheet,
         icon: const Icon(Icons.add),
         label: const Text('Neu'),
       ),
       body: StreamBuilder<List<Note>>(
         stream: _noteStream(),
-        builder: (context, snapshot) {
+        builder: (BuildContext context, AsyncSnapshot<List<Note>> snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
             return Center(child: Text('Fehler: ${snapshot.error}'));
           }
-          final notes = snapshot.data ?? <Note>[];
+          final List<Note> notes = snapshot.data ?? <Note>[];
           if (notes.isEmpty) {
             return const Center(child: Text('Keine Notizen'));
           }
           return ListView.builder(
             itemCount: notes.length,
-            itemBuilder: (context, i) => _noteCard(context, notes[i]),
+            itemBuilder: (BuildContext context, int i) => _noteCard(context, notes[i]),
           );
         },
       ),
@@ -172,29 +214,27 @@ class NoteEditorResult {
   final String title;
   final String content;
   final bool isDelete;
-  const NoteEditorResult(
-      {required this.title, required this.content, required this.isDelete});
+  const NoteEditorResult({required this.title, required this.content, required this.isDelete});
 }
 
 class NoteEditorSheet extends StatefulWidget {
   final String initialTitle;
   final String initialContent;
   final bool isEditing;
-  const NoteEditorSheet(
-      {super.key,
-      required this.initialTitle,
-      required this.initialContent,
-      required this.isEditing});
+  const NoteEditorSheet({
+    super.key,
+    required this.initialTitle,
+    required this.initialContent,
+    required this.isEditing,
+  });
   @override
   State<NoteEditorSheet> createState() => _NoteEditorSheetState();
 }
 
 class _NoteEditorSheetState extends State<NoteEditorSheet> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  late final TextEditingController _titleCtrl =
-      TextEditingController(text: widget.initialTitle);
-  late final TextEditingController _contentCtrl =
-      TextEditingController(text: widget.initialContent);
+  late final TextEditingController _titleCtrl = TextEditingController(text: widget.initialTitle);
+  late final TextEditingController _contentCtrl = TextEditingController(text: widget.initialContent);
 
   @override
   void dispose() {
@@ -205,9 +245,9 @@ class _NoteEditorSheetState extends State<NoteEditorSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final viewInsets = MediaQuery.of(context).viewInsets;
+    final EdgeInsets viewInsets = EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom);
     return Padding(
-      padding: EdgeInsets.only(bottom: viewInsets.bottom),
+      padding: viewInsets,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Form(
@@ -215,12 +255,11 @@ class _NoteEditorSheetState extends State<NoteEditorSheet> {
           child: Wrap(
             runSpacing: 12,
             children: <Widget>[
-              Text(widget.isEditing ? 'Notiz bearbeiten' : 'Neue Notiz',
-                  style: Theme.of(context).textTheme.titleLarge),
+              Text(widget.isEditing ? 'Notiz bearbeiten' : 'Neue Notiz', style: Theme.of(context).textTheme.titleLarge),
               TextFormField(
                 controller: _titleCtrl,
                 decoration: const InputDecoration(labelText: 'Titel'),
-                validator: (v) {
+                validator: (String? v) {
                   if (v == null || v.trim().isEmpty) return 'Pflichtfeld';
                   return null;
                 },
@@ -237,10 +276,9 @@ class _NoteEditorSheetState extends State<NoteEditorSheet> {
                   if (widget.isEditing)
                     FilledButton.tonalIcon(
                       onPressed: () {
-                        Navigator.of(context).pop(NoteEditorResult(
-                            title: _titleCtrl.text.trim(),
-                            content: _contentCtrl.text.trim(),
-                            isDelete: true));
+                        Navigator.of(context).pop(
+                          const NoteEditorResult(title: '', content: '', isDelete: true),
+                        );
                       },
                       icon: const Icon(Icons.delete),
                       label: const Text('Löschen'),
@@ -253,16 +291,18 @@ class _NoteEditorSheetState extends State<NoteEditorSheet> {
                   const SizedBox(width: 8),
                   FilledButton.icon(
                     onPressed: () {
-                      final ok = _formKey.currentState?.validate() ?? false;
+                      final bool ok = _formKey.currentState?.validate() ?? false;
                       if (!ok) return;
-                      Navigator.of(context).pop(NoteEditorResult(
+                      Navigator.of(context).pop(
+                        NoteEditorResult(
                           title: _titleCtrl.text.trim(),
                           content: _contentCtrl.text.trim(),
-                          isDelete: false));
+                          isDelete: false,
+                        ),
+                      );
                     },
                     icon: const Icon(Icons.check),
-                    label:
-                        Text(widget.isEditing ? 'Speichern' : 'Erstellen'),
+                    label: Text(widget.isEditing ? 'Speichern' : 'Erstellen'),
                   ),
                 ],
               ),
@@ -273,6 +313,7 @@ class _NoteEditorSheetState extends State<NoteEditorSheet> {
     );
   }
 }
+
 
 
 
