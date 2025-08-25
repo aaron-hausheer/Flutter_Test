@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'auth_gate.dart';
+import 'admin_pages.dart';
+import 'admin_stats.dart';
 
 const String SUPABASE_URL = 'https://qjojmiexgnxmibqcblqj.supabase.co';
 const String SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqb2ptaWV4Z254bWlicWNibHFqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTYwMzQwNzksImV4cCI6MjA3MTYxMDA3OX0.CQv4sm0uDUSrFRoiroaUKUXIQuq-uoCyZCx-95uYw-Y';
@@ -36,7 +39,7 @@ class CrudApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const NoteListPage(),
+      home: const AuthGate(child: NoteListPage()),
     );
   }
 }
@@ -53,7 +56,8 @@ class Note {
     final int id = (m['id'] as num).toInt();
     final String title = (m['title'] as String?) ?? '';
     final String content = (m['content'] as String?) ?? '';
-    final DateTime createdAt = DateTime.parse((m['created_at'] as String?) ?? DateTime.now().toIso8601String());
+    final dynamic createdRaw = m['created_at'];
+    final DateTime createdAt = createdRaw is String ? DateTime.parse(createdRaw) : (createdRaw is DateTime ? createdRaw : DateTime.now());
     return Note(id: id, title: title, content: content, createdAt: createdAt);
   }
 }
@@ -67,6 +71,7 @@ class NoteListPage extends StatefulWidget {
 class _NoteListPageState extends State<NoteListPage> {
   final TextEditingController _searchCtrl = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
+  String _searchQuery = '';
   bool _sortDesc = true;
   bool _selectionMode = false;
   final Set<int> _selectedIds = <int>{};
@@ -103,12 +108,18 @@ class _NoteListPageState extends State<NoteListPage> {
   }
 
   Stream<List<Note>> _noteStream() {
-    final Stream<List<Map<String, dynamic>>> s = _sb.from('notes').stream(primaryKey: <String>['id']).order('created_at', ascending: !_sortDesc);
+    final String uid = Supabase.instance.client.auth.currentUser!.id;
+    final Stream<List<Map<String, dynamic>>> s = Supabase.instance.client
+        .from('notes')
+        .stream(primaryKey: <String>['id'])
+        .eq('user_id', uid)
+        .order('created_at', ascending: !_sortDesc);
     return s.map((List<Map<String, dynamic>> rows) => rows.map((Map<String, dynamic> m) => Note.fromMap(m)).toList());
   }
 
+
   List<Note> _applyClientFilters(List<Note> all) {
-    final String q = _searchCtrl.text.trim().toLowerCase();
+    final String q = _searchQuery.trim().toLowerCase();
     if (q.isEmpty) return all;
     return all.where((Note n) => n.title.toLowerCase().contains(q) || n.content.toLowerCase().contains(q)).toList();
   }
@@ -216,6 +227,55 @@ class _NoteListPageState extends State<NoteListPage> {
     );
   }
 
+  bool _isAdmin() {
+    final User? u = Supabase.instance.client.auth.currentUser;
+    final Map<String, dynamic> app = u?.appMetadata ?? const <String, dynamic>{};
+    final Map<String, dynamic> user = u?.userMetadata ?? const <String, dynamic>{};
+    final dynamic r1 = app['role'];
+    final dynamic r2 = user['role'];
+    final dynamic f1 = app['is_admin'] ?? user['is_admin'];
+    if (r1 == 'admin') return true;
+    if (r2 == 'admin') return true;
+    if (f1 == true) return true;
+    return false;
+  }
+
+  Widget? _adminDrawer() {
+    if (!_isAdmin()) return null;
+    return Drawer(
+      child: SafeArea(
+        child: ListView(
+          children: <Widget>[
+            const ListTile(
+              leading: Icon(Icons.admin_panel_settings),
+              title: Text('Admin'),
+            ),
+            ListTile(
+            leading: const Icon(Icons.people),
+            title: const Text('Nutzer & Notizen'),
+            onTap: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (BuildContext c) => const AdminUsersPage()),
+              );
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.analytics),
+            title: const Text('Statistiken'),
+            onTap: () {
+              Navigator.of(context).pop();
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (BuildContext c) => const AdminStatsPage()),
+              );
+            },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _openSettings() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -245,6 +305,14 @@ class _NoteListPageState extends State<NoteListPage> {
                   Navigator.of(c).pop();
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('Abmelden'),
+                onTap: () async {
+                  await Supabase.instance.client.auth.signOut();
+                  if (mounted) Navigator.of(c).pop();
+                },
+              ),
               const SizedBox(height: 8),
             ],
           ),
@@ -256,24 +324,48 @@ class _NoteListPageState extends State<NoteListPage> {
   Widget _buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: TextField(
-        controller: _searchCtrl,
-        focusNode: _searchFocus,
-        decoration: InputDecoration(
-          hintText: 'Suchen...',
-          prefixIcon: const Icon(Icons.search),
-          suffixIcon: _searchCtrl.text.isEmpty
-              ? null
-              : IconButton(
-                  onPressed: () {
-                    _searchCtrl.clear();
-                    setState(() {});
-                  },
-                  icon: const Icon(Icons.clear),
-                ),
-        ),
-        onChanged: (String _) => setState(() {}),
-        textInputAction: TextInputAction.search,
+      child: ValueListenableBuilder<TextEditingValue>(
+        valueListenable: _searchCtrl,
+        builder: (BuildContext context, TextEditingValue value, Widget? _) {
+          final bool hasText = value.text.isNotEmpty;
+          return TextField(
+            controller: _searchCtrl,
+            focusNode: _searchFocus,
+            decoration: InputDecoration(
+              hintText: 'Suchen...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIconConstraints: const BoxConstraints(minWidth: 96),
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  IconButton(
+                    onPressed: () {
+                      setState(() => _searchQuery = _searchCtrl.text.trim());
+                      _searchFocus.requestFocus();
+                    },
+                    icon: const Icon(Icons.check),
+                    tooltip: 'Suche anwenden',
+                  ),
+                  if (hasText)
+                    IconButton(
+                      onPressed: () {
+                        _searchCtrl.clear();
+                        setState(() => _searchQuery = '');
+                        _searchFocus.requestFocus();
+                      },
+                      icon: const Icon(Icons.clear),
+                      tooltip: 'Zurücksetzen',
+                    ),
+                ],
+              ),
+            ),
+            onSubmitted: (String _) {
+              setState(() => _searchQuery = _searchCtrl.text.trim());
+              _searchFocus.requestFocus();
+            },
+            textInputAction: TextInputAction.search,
+          );
+        },
       ),
     );
   }
@@ -353,16 +445,20 @@ class _NoteListPageState extends State<NoteListPage> {
         title: Text('${_selectedIds.length} ausgewählt'),
         leading: IconButton(onPressed: () => _toggleSelectionMode(false), icon: const Icon(Icons.close)),
         actions: <Widget>[
-          IconButton(
-            onPressed: () => _deleteSelected(visible),
-            icon: const Icon(Icons.delete),
-          ),
+          IconButton(onPressed: () => _deleteSelected(visible), icon: const Icon(Icons.delete)),
         ],
       );
     }
     return AppBar(
       title: const Text('Notizen'),
       actions: <Widget>[
+        IconButton(
+          onPressed: () async {
+            await Supabase.instance.client.auth.signOut();
+          },
+          icon: const Icon(Icons.logout),
+          tooltip: 'Abmelden',
+        ),
         IconButton(onPressed: _openSettings, icon: const Icon(Icons.tune)),
         IconButton(
           onPressed: () {
@@ -381,15 +477,16 @@ class _NoteListPageState extends State<NoteListPage> {
       stream: _noteStream(),
       builder: (BuildContext context, AsyncSnapshot<List<Note>> snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return Scaffold(appBar: _buildAppBar(const <Note>[]), body: const Center(child: CircularProgressIndicator()));
+          return Scaffold(appBar: _buildAppBar(const <Note>[]), body: const Center(child: CircularProgressIndicator()), drawer: _adminDrawer());
         }
         if (snapshot.hasError) {
-          return Scaffold(appBar: _buildAppBar(const <Note>[]), body: Center(child: Text('Fehler: ${snapshot.error}')));
+          return Scaffold(appBar: _buildAppBar(const <Note>[]), body: Center(child: Text('Fehler: ${snapshot.error}')), drawer: _adminDrawer());
         }
         final List<Note> notes = snapshot.data ?? <Note>[];
         final List<Note> visible = _applyClientFilters(notes);
         return Scaffold(
           appBar: _buildAppBar(visible),
+          drawer: _adminDrawer(),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: _openCreateSheet,
             icon: const Icon(Icons.add),
