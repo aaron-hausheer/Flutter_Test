@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/auth_utils.dart';
 import '../../models/note.dart';
 import '../../models/group.dart';
 import '../../services/notes_service.dart';
@@ -75,16 +76,7 @@ class _NoteListPageState extends State<NoteListPage> {
   }
 
   Future<void> _createGroupDialog() async {
-    final List<String> palette = <String>[
-      '#FFF59D',
-      '#FFE082',
-      '#FFCC80',
-      '#FFAB91',
-      '#E1BEE7',
-      '#BBDEFB',
-      '#B2DFDB',
-      '#C8E6C9'
-    ];
+    final List<String> palette = <String>['#FFF59D', '#FFE082', '#FFCC80', '#FFAB91', '#E1BEE7', '#BBDEFB', '#B2DFDB', '#C8E6C9'];
     final TextEditingController ctrl = TextEditingController();
     final String? result = await showDialog<String>(
       context: context,
@@ -436,7 +428,7 @@ class _NoteListPageState extends State<NoteListPage> {
 
         return Scaffold(
           appBar: _buildAppBar(_applyClientFilters(snapshot.data ?? const <Note>[])),
-          drawer: const AdminDrawer(),
+          drawer: isAdmin() ? const AdminDrawer() : null,
           floatingActionButton: FloatingActionButton.extended(
             onPressed: _openCreateSheet,
             icon: const Icon(Icons.add),

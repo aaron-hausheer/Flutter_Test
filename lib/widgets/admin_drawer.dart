@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/auth_utils.dart';
 import '../pages/admin/admin_users_page.dart';
 import '../pages/admin/admin_stats_page.dart';
+import '../pages/admin/admin_user_mgmt.dart';
 
 class AdminDrawer extends StatelessWidget {
   const AdminDrawer({super.key});
 
   @override
   Widget build(BuildContext context) {
-    if (!isAdmin()) return const SizedBox.shrink();
     return Drawer(
       child: SafeArea(
         child: ListView(
@@ -34,6 +33,14 @@ class AdminDrawer extends StatelessWidget {
                 Navigator.of(context).push(MaterialPageRoute(builder: (BuildContext c) => const AdminStatsPage()));
               },
             ),
+            // ListTile(
+            //   leading: const Icon(Icons.manage_accounts),
+            //   title: const Text('Nutzerverwaltung'),
+            //   onTap: () {
+            //     Navigator.of(context).pop();
+            //     Navigator.of(context).push(MaterialPageRoute(builder: (BuildContext c) => const AdminUserMgmtPage()));
+            //   },
+            // ),
           ],
         ),
       ),
