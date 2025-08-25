@@ -64,8 +64,8 @@ class _AdminStatsPageState extends State<AdminStatsPage> {
     }
 
     final List<_NoteRow> last7 = notes.where((e) => e.createdAt.isAfter(from7)).toList();
-    final int notes7 = last7.length;
-    final int active7 = last7.map((e) => e.uid).where((id) => id.isNotEmpty).toSet().length;
+    final int notesLast7 = last7.length;
+    final int activeUsersLast7 = last7.map((e) => e.uid).where((id) => id.isNotEmpty).toSet().length;
 
     final Map<String, int> perUser14 = <String, int>{};
     for (final _NoteRow n in notes) {
@@ -76,17 +76,17 @@ class _AdminStatsPageState extends State<AdminStatsPage> {
         .map((e) => _TopUser(userId: e.key, name: names[e.key] ?? e.key, count: e.value))
         .toList()
       ..sort((a, b) => b.count.compareTo(a.count));
-    final List<_TopUser> top5 = top14.take(5).toList();
+    final List<_TopUser> topUsers14d = top14.take(5).toList();
 
     setState(() {
       _stats = _Stats(
         totalUsers: totalUsers,
         totalNotes: totalNotes,
-        notesLast7: notes7,
-        activeUsersLast7: active7,
+        notesLast7: notesLast7,
+        activeUsersLast7: activeUsersLast7,
         ping: ping,
         perDay: perDay,
-        topUsers14d: top5,
+        topUsers14d: topUsers14d,
       );
       _loading = false;
     });

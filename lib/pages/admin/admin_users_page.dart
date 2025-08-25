@@ -9,7 +9,6 @@ class AdminUsersPage extends StatefulWidget {
 
 class _AdminUsersPageState extends State<AdminUsersPage> {
   SupabaseClient get _sb => Supabase.instance.client;
-
   final Map<String, String> _displayNames = <String, String>{};
 
   @override
@@ -87,7 +86,7 @@ class _AdminUsersPageState extends State<AdminUsersPage> {
           if (snapshot.hasError) {
             return Center(child: Text('Fehler: ${snapshot.error}'));
           }
-          final List<_UserRow> users = snapshot.data ?? <_UserRow>[];
+          final List<_UserRow> users = snapshot.data ?? const <_UserRow>[];
           if (users.isEmpty) return const Center(child: Text('Keine Nutzer'));
           return RefreshIndicator(
             onRefresh: () async {
@@ -174,7 +173,7 @@ class AdminUserNotesPage extends StatelessWidget {
           if (snapshot.hasError) {
             return Center(child: Text('Fehler: ${snapshot.error}'));
           }
-          final List<_AdminNote> notes = snapshot.data ?? <_AdminNote>[];
+          final List<_AdminNote> notes = snapshot.data ?? const <_AdminNote>[];
           if (notes.isEmpty) return const Center(child: Text('Keine Notizen'));
           return ListView.builder(
             itemCount: notes.length,
