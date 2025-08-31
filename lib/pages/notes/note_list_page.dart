@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/note.dart';
 import '../../models/group.dart';
@@ -28,6 +27,7 @@ class _NoteListPageState extends State<NoteListPage> {
   bool _sortDesc = true;
   bool _selectionMode = false;
   bool _favOnly = false;
+  bool _trashOnly = false;
   final Set<int> _selectedIds = <int>{};
   int? _selectedGroupId;
   List<Group> _groupsCache = const <Group>[];
@@ -40,7 +40,7 @@ class _NoteListPageState extends State<NoteListPage> {
   }
 
   Stream<List<Note>> _noteStream() {
-    return _notes.streamForCurrentUser(sortDesc: _sortDesc, groupId: _selectedGroupId, favOnly: _favOnly);
+    return _notes.streamForCurrentUser(sortDesc: _sortDesc, groupId: _selectedGroupId, favOnly: _favOnly, trashedOnly: _trashOnly);
   }
 
   List<Note> _applyClientFilters(List<Note> all) {
@@ -167,23 +167,23 @@ class _NoteListPageState extends State<NoteListPage> {
     if (r.isDelete) {
       final bool confirm = await _confirmDelete(count: 1);
       if (!confirm) return;
-      await _notes.delete(note.id);
-      _showUndoSnackbar(<Note>[note]);
+      await _notes.moveToTrash(note.id);
+      _showUndoTrashSnackbar(<int>[note.id]);
     } else {
       await _notes.update(note.id, r.title, r.content, groupId: r.groupId);
     }
   }
 
-  Future<bool> _confirmDelete({required int count}) async {
+  Future<bool> _confirmDelete({required int count, bool permanent = false}) async {
     final bool? ok = await showDialog<bool>(
       context: context,
       builder: (BuildContext c) {
         return AlertDialog(
-          title: Text(count == 1 ? 'Notiz löschen?' : '$count Notizen löschen?'),
-          content: Text(count == 1 ? 'Diese Aktion kann nicht rückgängig gemacht werden.' : 'Diese Aktion kann nicht rückgängig gemacht werden.'),
+          title: Text(permanent ? (count == 1 ? 'Endgültig löschen?' : '$count endgültig löschen?') : (count == 1 ? 'In Papierkorb?' : '$count in Papierkorb?')),
+          content: Text(permanent ? 'Diese Aktion kann nicht rückgängig gemacht werden.' : 'Dies kann rückgängig gemacht werden.'),
           actions: <Widget>[
             TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text('Abbrechen')),
-            FilledButton.tonal(onPressed: () => Navigator.of(c).pop(true), child: const Text('Löschen')),
+            FilledButton.tonal(onPressed: () => Navigator.of(c).pop(true), child: Text(permanent ? 'Löschen' : 'Verschieben')),
           ],
         );
       },
@@ -210,25 +210,29 @@ class _NoteListPageState extends State<NoteListPage> {
 
   Future<void> _deleteSelected(List<Note> visible) async {
     if (_selectedIds.isEmpty) return;
+    if (_trashOnly) {
+      final bool ok = await _confirmDelete(count: _selectedIds.length, permanent: true);
+      if (!ok) return;
+      await _notes.purgeTrashedForCurrentUser();
+      _toggleSelectionMode(false);
+      return;
+    }
     final bool ok = await _confirmDelete(count: _selectedIds.length);
     if (!ok) return;
-    final List<Note> toDelete = visible.where((Note n) => _selectedIds.contains(n.id)).toList();
-    await _notes.deleteMany(_selectedIds);
+    await _notes.moveManyToTrash(_selectedIds);
     _toggleSelectionMode(false);
-    _showUndoSnackbar(toDelete);
+    _showUndoTrashSnackbar(_selectedIds.toList());
   }
 
-  void _showUndoSnackbar(List<Note> deleted) {
-    if (deleted.isEmpty) return;
+  void _showUndoTrashSnackbar(List<int> ids) {
+    if (ids.isEmpty) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(deleted.length == 1 ? 'Notiz gelöscht' : '${deleted.length} Notizen gelöscht'),
+        content: Text(ids.length == 1 ? 'In Papierkorb verschoben' : '${ids.length} in Papierkorb verschoben'),
         action: SnackBarAction(
           label: 'Rückgängig',
           onPressed: () async {
-            for (final Note n in deleted) {
-              await _notes.create(n.title, n.content, groupId: n.groupId, isFavorite: n.isFavorite);
-            }
+            await _notes.restoreMany(ids);
           },
         ),
       ),
@@ -264,14 +268,17 @@ class _NoteListPageState extends State<NoteListPage> {
                   Navigator.of(c).pop();
                 },
               ),
-              ListTile(
-                leading: const Icon(Icons.folder),
-                title: const Text('Neue Gruppe'),
-                onTap: () async {
-                  Navigator.of(c).pop();
-                  await _createGroupDialog();
-                },
-              ),
+              if (_trashOnly)
+                ListTile(
+                  leading: const Icon(Icons.delete_forever),
+                  title: const Text('Papierkorb leeren'),
+                  onTap: () async {
+                    Navigator.of(c).pop();
+                    final bool ok = await _confirmDelete(count: 0, permanent: true);
+                    if (!ok) return;
+                    await _notes.purgeTrashedForCurrentUser();
+                  },
+                ),
               ListTile(
                 leading: const Icon(Icons.logout),
                 title: const Text('Abmelden'),
@@ -327,36 +334,17 @@ class _NoteListPageState extends State<NoteListPage> {
         onDeleted: () => setState(() => _favOnly = false),
       ));
     }
+    if (_trashOnly) {
+      chips.add(InputChip(
+        label: const Text('Papierkorb'),
+        avatar: const Icon(Icons.delete_outline, size: 18),
+        onDeleted: () => setState(() => _trashOnly = false),
+      ));
+    }
     if (chips.isEmpty) return const SizedBox(height: 8);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Wrap(spacing: 8, runSpacing: 8, children: chips),
-    );
-  }
-
-  Widget _loadingSkeletonGrid(BuildContext context) {
-    final double w = MediaQuery.of(context).size.width;
-    int cols = (w / 220).floor();
-    if (cols < 2) cols = 2;
-    if (cols > 6) cols = 6;
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: cols,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.9,
-      ),
-      itemCount: cols * 2,
-      itemBuilder: (BuildContext context, int i) {
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 400),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
-            borderRadius: BorderRadius.circular(16),
-          ),
-        );
-      },
     );
   }
 
@@ -387,10 +375,14 @@ class _NoteListPageState extends State<NoteListPage> {
           selected: selected,
           tileColor: tileColor,
           isFavorite: n.isFavorite,
+          inTrash: _trashOnly,
           onTap: () {
             if (_selectionMode) {
               _toggleSelected(n.id);
             } else {
+              if (_trashOnly) {
+                return;
+              }
               _openEditSheet(n);
             }
           },
@@ -401,12 +393,24 @@ class _NoteListPageState extends State<NoteListPage> {
           onEdit: () => _openEditSheet(n),
           onDuplicate: () async => _notes.duplicate(n),
           onDelete: () async {
-            final bool ok = await _confirmDelete(count: 1);
-            if (!ok) return;
-            await _notes.delete(n.id);
-            _showUndoSnackbar(<Note>[n]);
+            if (_trashOnly) {
+              final bool ok = await _confirmDelete(count: 1, permanent: true);
+              if (!ok) return;
+              await _notes.purge(n.id);
+            } else {
+              final bool ok = await _confirmDelete(count: 1);
+              if (!ok) return;
+              await _notes.moveToTrash(n.id);
+              _showUndoTrashSnackbar(<int>[n.id]);
+            }
           },
           onToggleFavorite: () async => _notes.setFavorite(n.id, !n.isFavorite),
+          onRestore: () async => _notes.restore(n.id),
+          onPurge: () async {
+            final bool ok = await _confirmDelete(count: 1, permanent: true);
+            if (!ok) return;
+            await _notes.purge(n.id);
+          },
         );
       },
     );
@@ -418,7 +422,7 @@ class _NoteListPageState extends State<NoteListPage> {
         title: Text('${_selectedIds.length} ausgewählt'),
         leading: IconButton(onPressed: () => _toggleSelectionMode(false), icon: const Icon(Icons.close)),
         actions: <Widget>[
-          IconButton(onPressed: () => _deleteSelected(visible), icon: const Icon(Icons.delete)),
+          IconButton(onPressed: () => _deleteSelected(visible), icon: Icon(_trashOnly ? Icons.delete_forever : Icons.delete)),
         ],
       );
     }
@@ -435,6 +439,11 @@ class _NoteListPageState extends State<NoteListPage> {
           icon: Icon(_favOnly ? Icons.star : Icons.star_border),
           tooltip: _favOnly ? 'Nur Favoriten' : 'Alle Notizen',
         ),
+        IconButton(
+          onPressed: () => setState(() => _trashOnly = !_trashOnly),
+          icon: Icon(_trashOnly ? Icons.delete : Icons.delete_outline),
+          tooltip: _trashOnly ? 'Papierkorb' : 'Papierkorb',
+        ),
         IconButton(onPressed: _openSettings, icon: const Icon(Icons.tune)),
         IconButton(
           onPressed: () {
@@ -449,150 +458,79 @@ class _NoteListPageState extends State<NoteListPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Shortcuts(
-      shortcuts: <ShortcutActivator, Intent>{
-        const SingleActivator(LogicalKeyboardKey.keyF, control: true): const _FocusSearchIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyF, meta: true): const _FocusSearchIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyK, control: true): const _NewNoteIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyK, meta: true): const _NewNoteIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyL, control: true): const _ToggleFavIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyL, meta: true): const _ToggleFavIntent(),
-        const SingleActivator(LogicalKeyboardKey.keyS, shift: true): const _ToggleSortIntent(),
-      },
-      child: Actions(
-        actions: <Type, Action<Intent>>{
-          _FocusSearchIntent: CallbackAction<_FocusSearchIntent>(onInvoke: (Intent i) {
-            _searchFocus.requestFocus();
-            return null;
-          }),
-          _NewNoteIntent: CallbackAction<_NewNoteIntent>(onInvoke: (Intent i) {
-            _openCreateSheet();
-            return null;
-          }),
-          _ToggleFavIntent: CallbackAction<_ToggleFavIntent>(onInvoke: (Intent i) {
-            setState(() => _favOnly = !_favOnly);
-            return null;
-          }),
-          _ToggleSortIntent: CallbackAction<_ToggleSortIntent>(onInvoke: (Intent i) {
-            setState(() => _sortDesc = !_sortDesc);
-            return null;
-          }),
-        },
-        child: Focus(
-          autofocus: true,
-          child: StreamBuilder<List<Note>>(
-            stream: _noteStream(),
-            builder: (BuildContext context, AsyncSnapshot<List<Note>> snapshot) {
-              final Widget body = Column(
-                children: <Widget>[
-                  _buildSearchBar(),
-                  _activeFiltersChips(),
-                  StreamBuilder<List<Group>>(
-                    stream: _groups.streamForCurrentUser(),
-                    builder: (BuildContext context, AsyncSnapshot<List<Group>> gs) {
-                      final List<Group> groups = gs.data ?? const <Group>[];
-                      _groupsCache = groups;
-                      return GroupFilterBar(
-                        groups: groups,
-                        selectedGroupId: _selectedGroupId,
-                        onSelected: (int? id) => setState(() => _selectedGroupId = id),
-                        onCreateTap: _createGroupDialog,
-                      );
-                    },
-                  ),
-                  if (snapshot.connectionState == ConnectionState.waiting)
-                    Expanded(child: _loadingSkeletonGrid(context))
-                  else if (snapshot.hasError)
-                    Expanded(
+    return StreamBuilder<List<Note>>(
+      stream: _noteStream(),
+      builder: (BuildContext context, AsyncSnapshot<List<Note>> snapshot) {
+        final Widget body = Column(
+          children: <Widget>[
+            _buildSearchBar(),
+            _activeFiltersChips(),
+            StreamBuilder<List<Group>>(
+              stream: _groups.streamForCurrentUser(),
+              builder: (BuildContext context, AsyncSnapshot<List<Group>> gs) {
+                final List<Group> groups = gs.data ?? const <Group>[];
+                _groupsCache = groups;
+                return GroupFilterBar(
+                  groups: groups,
+                  selectedGroupId: _selectedGroupId,
+                  onSelected: (int? id) => setState(() => _selectedGroupId = id),
+                  onCreateTap: _createGroupDialog,
+                );
+              },
+            ),
+            if (snapshot.connectionState == ConnectionState.waiting)
+              const Expanded(child: Center(child: CircularProgressIndicator()))
+            else if (snapshot.hasError)
+              Expanded(child: Center(child: Text('Fehler: ${snapshot.error}')))
+            else
+              Builder(
+                builder: (BuildContext _) {
+                  final List<Note> notes = snapshot.data ?? const <Note>[];
+                  final List<Note> visible = _applyClientFilters(notes);
+                  if (visible.isEmpty) {
+                    return Expanded(
                       child: Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
-                            Text('Fehler: ${snapshot.error}', textAlign: TextAlign.center),
-                            const SizedBox(height: 12),
-                            FilledButton.icon(
-                              onPressed: () async {
-                                await _notes.refreshTick();
-                                if (mounted) setState(() {});
-                              },
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Erneut versuchen'),
-                            ),
+                            Icon(_trashOnly ? Icons.delete_outline : Icons.note_add, size: 48),
+                            const SizedBox(height: 8),
+                            Text(_trashOnly ? 'Papierkorb ist leer' : 'Noch keine Notizen'),
+                            if (!_trashOnly) ...<Widget>[
+                              const SizedBox(height: 8),
+                              FilledButton.icon(onPressed: _openCreateSheet, icon: const Icon(Icons.add), label: const Text('Neue Notiz')),
+                            ],
                           ],
                         ),
                       ),
-                    )
-                  else
-                    Builder(
-                      builder: (BuildContext _) {
-                        final List<Note> notes = snapshot.data ?? const <Note>[];
-                        final List<Note> visible = _applyClientFilters(notes);
-                        if (visible.isEmpty) {
-                          return Expanded(
-                            child: Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: <Widget>[
-                                  const Icon(Icons.note_add, size: 48),
-                                  const SizedBox(height: 8),
-                                  const Text('Noch keine Notizen'),
-                                  const SizedBox(height: 8),
-                                  FilledButton.icon(
-                                    onPressed: _openCreateSheet,
-                                    icon: const Icon(Icons.add),
-                                    label: const Text('Neue Notiz'),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }
-                        return Expanded(
-                          child: RefreshIndicator(
-                            onRefresh: () async {
-                              await _notes.refreshTick();
-                            },
-                            child: AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 250),
-                              child: _grid(context, visible),
-                            ),
-                          ),
-                        );
+                    );
+                  }
+                  return Expanded(
+                    child: RefreshIndicator(
+                      onRefresh: () async {
+                        await _notes.refreshTick();
                       },
+                      child: _grid(context, visible),
                     ),
-                ],
-              );
+                  );
+                },
+              ),
+          ],
+        );
 
-              return Scaffold(
-                appBar: _buildAppBar(_applyClientFilters(snapshot.data ?? const <Note>[])),
-                drawer: const AdminDrawer(),
-                floatingActionButton: FloatingActionButton.extended(
+        return Scaffold(
+          appBar: _buildAppBar(_applyClientFilters(snapshot.data ?? const <Note>[])),
+          drawer: const AdminDrawer(),
+          floatingActionButton: _trashOnly
+              ? null
+              : FloatingActionButton.extended(
                   onPressed: _openCreateSheet,
                   icon: const Icon(Icons.add),
                   label: const Text('Neu'),
                 ),
-                body: body,
-              );
-            },
-          ),
-        ),
-      ),
+          body: body,
+        );
+      },
     );
   }
-}
-
-class _FocusSearchIntent extends Intent {
-  const _FocusSearchIntent();
-}
-
-class _NewNoteIntent extends Intent {
-  const _NewNoteIntent();
-}
-
-class _ToggleFavIntent extends Intent {
-  const _ToggleFavIntent();
-}
-
-class _ToggleSortIntent extends Intent {
-  const _ToggleSortIntent();
 }

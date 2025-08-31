@@ -5,6 +5,7 @@ class Note {
   final DateTime createdAt;
   final int? groupId;
   final bool isFavorite;
+  final DateTime? deletedAt;
 
   const Note({
     required this.id,
@@ -13,6 +14,7 @@ class Note {
     required this.createdAt,
     required this.groupId,
     required this.isFavorite,
+    required this.deletedAt,
   });
 
   factory Note.fromMap(Map<String, dynamic> m) {
@@ -23,6 +25,8 @@ class Note {
     final DateTime createdAt = createdRaw is String ? DateTime.parse(createdRaw) : (createdRaw is DateTime ? createdRaw : DateTime.now());
     final int? groupId = m['group_id'] == null ? null : (m['group_id'] as num).toInt();
     final bool isFavorite = (m['is_favorite'] as bool?) ?? false;
-    return Note(id: id, title: title, content: content, createdAt: createdAt, groupId: groupId, isFavorite: isFavorite);
+    final dynamic delRaw = m['deleted_at'];
+    final DateTime? deletedAt = delRaw == null ? null : (delRaw is String ? DateTime.parse(delRaw) : (delRaw is DateTime ? delRaw : null));
+    return Note(id: id, title: title, content: content, createdAt: createdAt, groupId: groupId, isFavorite: isFavorite, deletedAt: deletedAt);
   }
 }
