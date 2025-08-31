@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models/note.dart';
 import '../../models/group.dart';
@@ -15,6 +16,22 @@ class NoteListPage extends StatefulWidget {
   const NoteListPage({super.key});
   @override
   State<NoteListPage> createState() => _NoteListPageState();
+}
+
+class _NewNoteIntent extends Intent {
+  const _NewNoteIntent();
+}
+
+class _FocusSearchIntent extends Intent {
+  const _FocusSearchIntent();
+}
+
+class _ToggleFavFilterIntent extends Intent {
+  const _ToggleFavFilterIntent();
+}
+
+class _ToggleSortIntent extends Intent {
+  const _ToggleSortIntent();
 }
 
 class _NoteListPageState extends State<NoteListPage> {
@@ -268,6 +285,14 @@ class _NoteListPageState extends State<NoteListPage> {
                   Navigator.of(c).pop();
                 },
               ),
+              ListTile(
+                leading: const Icon(Icons.folder),
+                title: const Text('Neue Gruppe'),
+                onTap: () async {
+                  Navigator.of(c).pop();
+                  await _createGroupDialog();
+                },
+              ),
               if (_trashOnly)
                 ListTile(
                   leading: const Icon(Icons.delete_forever),
@@ -498,7 +523,7 @@ class _NoteListPageState extends State<NoteListPage> {
                             Text(_trashOnly ? 'Papierkorb ist leer' : 'Noch keine Notizen'),
                             if (!_trashOnly) ...<Widget>[
                               const SizedBox(height: 8),
-                              FilledButton.icon(onPressed: _openCreateSheet, icon: const Icon(Icons.add), label: const Text('Neue Notiz')),
+                              FilledButton.icon(onPressed: _openCreateSheet, icon: const Icon(Icons.add), label: const Text('Neu')),
                             ],
                           ],
                         ),
@@ -518,17 +543,53 @@ class _NoteListPageState extends State<NoteListPage> {
           ],
         );
 
-        return Scaffold(
-          appBar: _buildAppBar(_applyClientFilters(snapshot.data ?? const <Note>[])),
-          drawer: const AdminDrawer(),
-          floatingActionButton: _trashOnly
-              ? null
-              : FloatingActionButton.extended(
-                  onPressed: _openCreateSheet,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Neu'),
-                ),
-          body: body,
+        final List<Note> visibleForActions = _applyClientFilters(snapshot.data ?? const <Note>[]);
+
+        return Shortcuts(
+          shortcuts: <LogicalKeySet, Intent>{
+            LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyF): const _FocusSearchIntent(),
+            LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyF): const _FocusSearchIntent(),
+            LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyK): const _NewNoteIntent(),
+            LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyK): const _NewNoteIntent(),
+            LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyL): const _ToggleFavFilterIntent(),
+            LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyL): const _ToggleFavFilterIntent(),
+            LogicalKeySet(LogicalKeyboardKey.shift, LogicalKeyboardKey.keyS): const _ToggleSortIntent(),
+          },
+          child: Actions(
+            actions: <Type, Action<Intent>>{
+              _NewNoteIntent: CallbackAction<_NewNoteIntent>(onInvoke: (_) {
+                _openCreateSheet();
+                return null;
+              }),
+              _FocusSearchIntent: CallbackAction<_FocusSearchIntent>(onInvoke: (_) {
+                _searchFocus.requestFocus();
+                return null;
+              }),
+              _ToggleFavFilterIntent: CallbackAction<_ToggleFavFilterIntent>(onInvoke: (_) {
+                setState(() => _favOnly = !_favOnly);
+                return null;
+              }),
+              _ToggleSortIntent: CallbackAction<_ToggleSortIntent>(onInvoke: (_) {
+                setState(() => _sortDesc = !_sortDesc);
+                return null;
+              }),
+            },
+            child: Focus(
+              autofocus: true,
+              child: Scaffold(
+                appBar: _buildAppBar(visibleForActions),
+                drawer: const AdminDrawer(),
+                floatingActionButton: _trashOnly
+                    ? null
+                    : FloatingActionButton.extended(
+                        onPressed: _openCreateSheet,
+                        icon: const Icon(Icons.add),
+                        label: const Text('Neu'),
+                      ),
+                body: body,
+              ),
+            ),
+          ),
         );
       },
     );
