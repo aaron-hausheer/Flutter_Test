@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../core/auth_utils.dart';
 import '../../models/note.dart';
 import '../../models/group.dart';
 import '../../services/notes_service.dart';
@@ -27,9 +27,8 @@ class _NoteListPageState extends State<NoteListPage> {
   String _searchQuery = '';
   bool _sortDesc = true;
   bool _selectionMode = false;
+  bool _favOnly = false;
   final Set<int> _selectedIds = <int>{};
-  Note? _lastDeleted;
-
   int? _selectedGroupId;
   List<Group> _groupsCache = const <Group>[];
 
@@ -41,7 +40,7 @@ class _NoteListPageState extends State<NoteListPage> {
   }
 
   Stream<List<Note>> _noteStream() {
-    return _notes.streamForCurrentUser(sortDesc: _sortDesc, groupId: _selectedGroupId);
+    return _notes.streamForCurrentUser(sortDesc: _sortDesc, groupId: _selectedGroupId, favOnly: _favOnly);
   }
 
   List<Note> _applyClientFilters(List<Note> all) {
@@ -64,7 +63,7 @@ class _NoteListPageState extends State<NoteListPage> {
     if (h.startsWith('#')) h = h.substring(1);
     if (h.length == 6) h = 'FF$h';
     final int v = int.parse(h, radix: 16);
-    return Color(int.parse('0x$v'));
+    return Color(v);
   }
 
   Color _tileColorFor(int? groupId) {
@@ -228,7 +227,7 @@ class _NoteListPageState extends State<NoteListPage> {
           label: 'Rückgängig',
           onPressed: () async {
             for (final Note n in deleted) {
-              await _notes.create(n.title, n.content, groupId: n.groupId);
+              await _notes.create(n.title, n.content, groupId: n.groupId, isFavorite: n.isFavorite);
             }
           },
         ),
@@ -300,6 +299,67 @@ class _NoteListPageState extends State<NoteListPage> {
     );
   }
 
+  Widget _activeFiltersChips() {
+    final List<Widget> chips = <Widget>[];
+    if (_searchQuery.isNotEmpty) {
+      chips.add(InputChip(
+        label: Text('Suche: $_searchQuery'),
+        onDeleted: () => setState(() {
+          _searchQuery = '';
+          _searchCtrl.clear();
+          _searchFocus.requestFocus();
+        }),
+      ));
+    }
+    if (_selectedGroupId != null) {
+      final Group? g = _groupsCache.where((Group e) => e.id == _selectedGroupId).cast<Group?>().firstWhere((Group? _) => true, orElse: () => null);
+      final String name = g?.name ?? 'Gruppe';
+      chips.add(InputChip(
+        label: Text(name),
+        avatar: CircleAvatar(backgroundColor: _tileColorFor(_selectedGroupId)),
+        onDeleted: () => setState(() => _selectedGroupId = null),
+      ));
+    }
+    if (_favOnly) {
+      chips.add(InputChip(
+        label: const Text('Favoriten'),
+        avatar: const Icon(Icons.star, size: 18),
+        onDeleted: () => setState(() => _favOnly = false),
+      ));
+    }
+    if (chips.isEmpty) return const SizedBox(height: 8);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Wrap(spacing: 8, runSpacing: 8, children: chips),
+    );
+  }
+
+  Widget _loadingSkeletonGrid(BuildContext context) {
+    final double w = MediaQuery.of(context).size.width;
+    int cols = (w / 220).floor();
+    if (cols < 2) cols = 2;
+    if (cols > 6) cols = 6;
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: cols,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.9,
+      ),
+      itemCount: cols * 2,
+      itemBuilder: (BuildContext context, int i) {
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 400),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.5),
+            borderRadius: BorderRadius.circular(16),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _grid(BuildContext context, List<Note> notes) {
     final double w = MediaQuery.of(context).size.width;
     int cols = (w / 220).floor();
@@ -326,6 +386,7 @@ class _NoteListPageState extends State<NoteListPage> {
           selectionMode: _selectionMode,
           selected: selected,
           tileColor: tileColor,
+          isFavorite: n.isFavorite,
           onTap: () {
             if (_selectionMode) {
               _toggleSelected(n.id);
@@ -345,6 +406,7 @@ class _NoteListPageState extends State<NoteListPage> {
             await _notes.delete(n.id);
             _showUndoSnackbar(<Note>[n]);
           },
+          onToggleFavorite: () async => _notes.setFavorite(n.id, !n.isFavorite),
         );
       },
     );
@@ -368,6 +430,11 @@ class _NoteListPageState extends State<NoteListPage> {
           icon: const Icon(Icons.folder),
           tooltip: 'Neue Gruppe',
         ),
+        IconButton(
+          onPressed: () => setState(() => _favOnly = !_favOnly),
+          icon: Icon(_favOnly ? Icons.star : Icons.star_border),
+          tooltip: _favOnly ? 'Nur Favoriten' : 'Alle Notizen',
+        ),
         IconButton(onPressed: _openSettings, icon: const Icon(Icons.tune)),
         IconButton(
           onPressed: () {
@@ -382,61 +449,150 @@ class _NoteListPageState extends State<NoteListPage> {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<List<Note>>(
-      stream: _noteStream(),
-      builder: (BuildContext context, AsyncSnapshot<List<Note>> snapshot) {
-        final Widget body = Column(
-          children: <Widget>[
-            _buildSearchBar(),
-            StreamBuilder<List<Group>>(
-              stream: _groups.streamForCurrentUser(),
-              builder: (BuildContext context, AsyncSnapshot<List<Group>> gs) {
-                final List<Group> groups = gs.data ?? const <Group>[];
-                _groupsCache = groups;
-                return GroupFilterBar(
-                  groups: groups,
-                  selectedGroupId: _selectedGroupId,
-                  onSelected: (int? id) => setState(() => _selectedGroupId = id),
-                  onCreateTap: _createGroupDialog,
-                );
-              },
-            ),
-            if (snapshot.connectionState == ConnectionState.waiting)
-              const Expanded(child: Center(child: CircularProgressIndicator()))
-            else if (snapshot.hasError)
-              Expanded(child: Center(child: Text('Fehler: ${snapshot.error}')))
-            else
-              Builder(
-                builder: (BuildContext _) {
-                  final List<Note> notes = snapshot.data ?? const <Note>[];
-                  final List<Note> visible = _applyClientFilters(notes);
-                  if (visible.isEmpty) {
-                    return const Expanded(child: Center(child: Text('Keine Notizen')));
-                  }
-                  return Expanded(
-                    child: RefreshIndicator(
-                      onRefresh: () async {
-                        await _notes.refreshTick();
-                      },
-                      child: _grid(context, visible),
-                    ),
-                  );
-                },
-              ),
-          ],
-        );
-
-        return Scaffold(
-          appBar: _buildAppBar(_applyClientFilters(snapshot.data ?? const <Note>[])),
-          drawer: isAdmin() ? const AdminDrawer() : null,
-          floatingActionButton: FloatingActionButton.extended(
-            onPressed: _openCreateSheet,
-            icon: const Icon(Icons.add),
-            label: const Text('Neu'),
-          ),
-          body: body,
-        );
+    return Shortcuts(
+      shortcuts: <ShortcutActivator, Intent>{
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true): const _FocusSearchIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyF, meta: true): const _FocusSearchIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true): const _NewNoteIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyK, meta: true): const _NewNoteIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyL, control: true): const _ToggleFavIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyL, meta: true): const _ToggleFavIntent(),
+        const SingleActivator(LogicalKeyboardKey.keyS, shift: true): const _ToggleSortIntent(),
       },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _FocusSearchIntent: CallbackAction<_FocusSearchIntent>(onInvoke: (Intent i) {
+            _searchFocus.requestFocus();
+            return null;
+          }),
+          _NewNoteIntent: CallbackAction<_NewNoteIntent>(onInvoke: (Intent i) {
+            _openCreateSheet();
+            return null;
+          }),
+          _ToggleFavIntent: CallbackAction<_ToggleFavIntent>(onInvoke: (Intent i) {
+            setState(() => _favOnly = !_favOnly);
+            return null;
+          }),
+          _ToggleSortIntent: CallbackAction<_ToggleSortIntent>(onInvoke: (Intent i) {
+            setState(() => _sortDesc = !_sortDesc);
+            return null;
+          }),
+        },
+        child: Focus(
+          autofocus: true,
+          child: StreamBuilder<List<Note>>(
+            stream: _noteStream(),
+            builder: (BuildContext context, AsyncSnapshot<List<Note>> snapshot) {
+              final Widget body = Column(
+                children: <Widget>[
+                  _buildSearchBar(),
+                  _activeFiltersChips(),
+                  StreamBuilder<List<Group>>(
+                    stream: _groups.streamForCurrentUser(),
+                    builder: (BuildContext context, AsyncSnapshot<List<Group>> gs) {
+                      final List<Group> groups = gs.data ?? const <Group>[];
+                      _groupsCache = groups;
+                      return GroupFilterBar(
+                        groups: groups,
+                        selectedGroupId: _selectedGroupId,
+                        onSelected: (int? id) => setState(() => _selectedGroupId = id),
+                        onCreateTap: _createGroupDialog,
+                      );
+                    },
+                  ),
+                  if (snapshot.connectionState == ConnectionState.waiting)
+                    Expanded(child: _loadingSkeletonGrid(context))
+                  else if (snapshot.hasError)
+                    Expanded(
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Text('Fehler: ${snapshot.error}', textAlign: TextAlign.center),
+                            const SizedBox(height: 12),
+                            FilledButton.icon(
+                              onPressed: () async {
+                                await _notes.refreshTick();
+                                if (mounted) setState(() {});
+                              },
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Erneut versuchen'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    Builder(
+                      builder: (BuildContext _) {
+                        final List<Note> notes = snapshot.data ?? const <Note>[];
+                        final List<Note> visible = _applyClientFilters(notes);
+                        if (visible.isEmpty) {
+                          return Expanded(
+                            child: Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  const Icon(Icons.note_add, size: 48),
+                                  const SizedBox(height: 8),
+                                  const Text('Noch keine Notizen'),
+                                  const SizedBox(height: 8),
+                                  FilledButton.icon(
+                                    onPressed: _openCreateSheet,
+                                    icon: const Icon(Icons.add),
+                                    label: const Text('Neue Notiz'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+                        return Expanded(
+                          child: RefreshIndicator(
+                            onRefresh: () async {
+                              await _notes.refreshTick();
+                            },
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 250),
+                              child: _grid(context, visible),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                ],
+              );
+
+              return Scaffold(
+                appBar: _buildAppBar(_applyClientFilters(snapshot.data ?? const <Note>[])),
+                drawer: const AdminDrawer(),
+                floatingActionButton: FloatingActionButton.extended(
+                  onPressed: _openCreateSheet,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Neu'),
+                ),
+                body: body,
+              );
+            },
+          ),
+        ),
+      ),
     );
   }
+}
+
+class _FocusSearchIntent extends Intent {
+  const _FocusSearchIntent();
+}
+
+class _NewNoteIntent extends Intent {
+  const _NewNoteIntent();
+}
+
+class _ToggleFavIntent extends Intent {
+  const _ToggleFavIntent();
+}
+
+class _ToggleSortIntent extends Intent {
+  const _ToggleSortIntent();
 }
