@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:file_picker/file_picker.dart' show PlatformFile; // <— wichtig
 import '../../models/note.dart';
 import '../../models/group.dart';
 import '../../models/tag.dart';
@@ -23,25 +22,16 @@ class NoteListPage extends StatefulWidget {
   State<NoteListPage> createState() => _NoteListPageState();
 }
 
-class _NewNoteIntent extends Intent {
-  const _NewNoteIntent();
-}
-class _FocusSearchIntent extends Intent {
-  const _FocusSearchIntent();
-}
-class _ToggleFavFilterIntent extends Intent {
-  const _ToggleFavFilterIntent();
-}
-class _ToggleSortIntent extends Intent {
-  const _ToggleSortIntent();
-}
+class _NewNoteIntent extends Intent { const _NewNoteIntent(); }
+class _FocusSearchIntent extends Intent { const _FocusSearchIntent(); }
+class _ToggleFavFilterIntent extends Intent { const _ToggleFavFilterIntent(); }
+class _ToggleSortIntent extends Intent { const _ToggleSortIntent(); }
 
 class _NoteListPageState extends State<NoteListPage> {
   final TextEditingController _searchCtrl = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
   final NotesService _notes = NotesService();
   final GroupsService _groups = GroupsService();
-  final TagsService _tags = TagsService();
   final AttachmentsService _attachments = AttachmentsService();
 
   String _searchQuery = '';
@@ -101,10 +91,7 @@ class _NoteListPageState extends State<NoteListPage> {
   }
 
   Future<void> _createGroupDialog() async {
-    final List<String> palette = <String>[
-      '#FFF59D', '#FFE082', '#FFCC80', '#FFAB91',
-      '#E1BEE7', '#BBDEFB', '#B2DFDB', '#C8E6C9'
-    ];
+    final List<String> palette = <String>['#FFF59D', '#FFE082', '#FFCC80', '#FFAB91', '#E1BEE7', '#BBDEFB', '#B2DFDB', '#C8E6C9'];
     final TextEditingController ctrl = TextEditingController();
     final String? result = await showDialog<String>(
       context: context,
@@ -127,7 +114,8 @@ class _NoteListPageState extends State<NoteListPage> {
                       return InkWell(
                         onTap: () => setS(() => sel = i),
                         child: Container(
-                          width: 28, height: 28,
+                          width: 28,
+                          height: 28,
                           decoration: BoxDecoration(
                             color: _parseHexColor(palette[i]),
                             shape: BoxShape.circle,
@@ -159,9 +147,10 @@ class _NoteListPageState extends State<NoteListPage> {
 
   Future<void> _openCreateSheet() async {
     final List<Group> groups = await _groups.fetchAllForCurrentUser();
-    final List<Tag> allTags = await _tags.fetchAllForCurrentUser();
+    final TagsService tagsSvc = TagsService();
+    final List<Tag> allTags = await tagsSvc.fetchAllForCurrentUser();
 
-    final NoteEditorResult? res = await showModalBottomSheet<NoteEditorResult>(
+    final NoteEditorResult? r = await showModalBottomSheet<NoteEditorResult>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -175,55 +164,24 @@ class _NoteListPageState extends State<NoteListPage> {
         initialTagIds: const <int>[],
       ),
     );
-    if (res == null) return;
-    if (!res.isDelete) {
-      final int newId = await _notes.create(res.title, res.content, groupId: res.groupId, tagIds: res.tagIds);
-      // Bilder aus dem Editor übernehmen (falls vorhanden)
-      try {
-        final List<PlatformFile>? images = (res as dynamic).images as List<PlatformFile>?;
-        if (images != null && images.isNotEmpty) {
-          await _attachments.uploadFiles(newId, images);
-        }
-      } catch (_) {}
-    }
-  }
+    if (r == null || r.isDelete) return;
 
-  Future<void> _openEditSheet(Note note) async {
-    final List<Group> groups = await _groups.fetchAllForCurrentUser();
-    final List<Tag> allTags = await _tags.fetchAllForCurrentUser();
-    final List<Tag> noteTags = await _tags.tagsForNote(note.id);
-    final List<int> currentTagIds = noteTags.map((Tag t) => t.id).toList();
-
-    final NoteEditorResult? res = await showModalBottomSheet<NoteEditorResult>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (BuildContext c) => NoteEditorSheet(
-        initialTitle: note.title,
-        initialContent: note.content,
-        isEditing: true,
-        groups: groups,
-        initialGroupId: note.groupId,
-        availableTags: allTags,
-        initialTagIds: currentTagIds,
-      ),
+    // 1) Note anlegen und ID bekommen
+    final int newId = await _notes.create(
+      r.title,
+      r.content,
+      groupId: r.groupId,
+      tagIds: r.tagIds,
     );
-    if (res == null) return;
 
-    if (res.isDelete) {
-      final bool confirm = await _confirmDelete(count: 1);
-      if (!confirm) return;
-      await _notes.moveToTrash(note.id);
-      _showUndoTrashSnackbar(<int>[note.id]);
-    } else {
-      await _notes.update(note.id, res.title, res.content, groupId: res.groupId, tagIds: res.tagIds);
-      // Bilder ggf. hochladen
-      try {
-        final List<PlatformFile>? images = (res as dynamic).images as List<PlatformFile>?;
-        if (images != null && images.isNotEmpty) {
-          await _attachments.uploadFiles(note.id, images);
-        }
-      } catch (_) {}
+    // 2) Falls Bilder ausgewählt: hochladen
+    if (r.images.isNotEmpty) {
+      await _attachments.uploadFiles(newId, r.images);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${r.images.length} Bild(er) hochgeladen')),
+        );
+      }
     }
   }
 
@@ -263,32 +221,172 @@ class _NoteListPageState extends State<NoteListPage> {
 
   Future<void> _deleteSelected(List<Note> visible) async {
     if (_selectedIds.isEmpty) return;
+
     if (_trashOnly) {
+      // Endgültig nur die ausgewählten löschen
       final bool ok = await _confirmDelete(count: _selectedIds.length, permanent: true);
       if (!ok) return;
-      await _notes.purgeTrashedForCurrentUser();
+      for (final int id in _selectedIds) {
+        await _notes.purge(id);
+      }
       _toggleSelectionMode(false);
       return;
     }
+
     final bool ok = await _confirmDelete(count: _selectedIds.length);
     if (!ok) return;
     await _notes.moveManyToTrash(_selectedIds);
     _toggleSelectionMode(false);
-    _showUndoTrashSnackbar(_selectedIds.toList());
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('In Papierkorb verschoben')));
   }
 
-  void _showUndoTrashSnackbar(List<int> ids) {
-    if (ids.isEmpty) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(ids.length == 1 ? 'In Papierkorb verschoben' : '${ids.length} in Papierkorb verschoben'),
-        action: SnackBarAction(
-          label: 'Rückgängig',
-          onPressed: () async {
-            await _notes.restoreMany(ids);
-          },
-        ),
+  Future<List<String>> _previewUrlsFor(int noteId) {
+    return _attachments.listUrls(noteId, limit: 3);
+  }
+
+  Widget _buildSearchBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+      child: SubmitSearchBar(
+        controller: _searchCtrl,
+        focusNode: _searchFocus,
+        onApply: (String q) => setState(() => _searchQuery = q),
       ),
+    );
+  }
+
+  Widget _activeFiltersChips() {
+    final List<Widget> chips = <Widget>[];
+    if (_searchQuery.isNotEmpty) {
+      chips.add(InputChip(
+        label: Text('Suche: $_searchQuery'),
+        onDeleted: () => setState(() {
+          _searchQuery = '';
+          _searchCtrl.clear();
+          _searchFocus.requestFocus();
+        }),
+      ));
+    }
+    if (_selectedGroupId != null) {
+      final Group? g = _groupsCache.where((Group e) => e.id == _selectedGroupId).cast<Group?>().firstWhere((Group? _) => true, orElse: () => null);
+      final String name = g?.name ?? 'Gruppe';
+      chips.add(InputChip(
+        label: Text(name),
+        avatar: CircleAvatar(backgroundColor: _tileColorFor(_selectedGroupId)),
+        onDeleted: () => setState(() => _selectedGroupId = null),
+      ));
+    }
+    if (_favOnly) {
+      chips.add(InputChip(
+        label: const Text('Favoriten'),
+        avatar: const Icon(Icons.star, size: 18),
+        onDeleted: () => setState(() => _favOnly = false),
+      ));
+    }
+    if (_trashOnly) {
+      chips.add(InputChip(
+        label: const Text('Papierkorb'),
+        avatar: const Icon(Icons.delete_outline, size: 18),
+        onDeleted: () => setState(() => _trashOnly = false),
+      ));
+    }
+    if (chips.isEmpty) return const SizedBox(height: 8);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Wrap(spacing: 8, runSpacing: 8, children: chips),
+    );
+  }
+
+  Widget _grid(BuildContext context, List<Note> notes) {
+    final double w = MediaQuery.of(context).size.width;
+    int cols = (w / 220).floor();
+    if (cols < 2) cols = 2;
+    if (cols > 6) cols = 6;
+
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: cols,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 0.9,
+      ),
+      itemCount: notes.length,
+      itemBuilder: (BuildContext context, int i) {
+        final Note n = notes[i];
+        final bool selected = _selectedIds.contains(n.id);
+        final Color tileColor = _tileColorFor(n.groupId);
+        return FutureBuilder<List<String>>(
+          future: _previewUrlsFor(n.id),
+          builder: (BuildContext context, AsyncSnapshot<List<String>> snap) {
+            final List<String> previews = snap.data ?? const <String>[];
+            return StickyNoteTile(
+              title: n.title,
+              content: n.content,
+              footer: _formatDate(n.createdAt),
+              selectionMode: _selectionMode,
+              selected: selected,
+              tileColor: tileColor,
+              isFavorite: n.isFavorite,
+              inTrash: _trashOnly,
+              previewImageUrls: previews,
+              onTap: () {
+                if (_selectionMode) {
+                  _toggleSelected(n.id);
+                  return;
+                }
+                Navigator.of(context).push(MaterialPageRoute(builder: (BuildContext _) => NoteDetailPage(note: n)));
+              },
+              onLongPress: () => _toggleSelectionMode(true),
+              onDelete: () async {
+                if (_trashOnly) {
+                  final bool ok = await _confirmDelete(count: 1, permanent: true);
+                  if (!ok) return;
+                  await _notes.purge(n.id);
+                } else {
+                  final bool ok = await _confirmDelete(count: 1);
+                  if (!ok) return;
+                  await _notes.moveToTrash(n.id);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('In Papierkorb verschoben')));
+                }
+              },
+              onToggleFavorite: () async => _notes.setFavorite(n.id, !n.isFavorite),
+              onRestore: () async => _notes.restore(n.id),
+              onPurge: () async {
+                final bool ok = await _confirmDelete(count: 1, permanent: true);
+                if (!ok) return;
+                await _notes.purge(n.id);
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar(List<Note> visible) {
+    if (_selectionMode) {
+      return AppBar(
+        title: Text('${_selectedIds.length} ausgewählt'),
+        leading: IconButton(onPressed: () => _toggleSelectionMode(false), icon: const Icon(Icons.close)),
+        actions: <Widget>[
+          IconButton(onPressed: () => _deleteSelected(visible), icon: Icon(_trashOnly ? Icons.delete_forever : Icons.delete)),
+        ],
+      );
+    }
+    return AppBar(
+      title: const Text('Notizen'),
+      actions: <Widget>[
+        IconButton(onPressed: _createGroupDialog, icon: const Icon(Icons.folder)),
+        IconButton(onPressed: () => setState(() => _favOnly = !_favOnly), icon: Icon(_favOnly ? Icons.star : Icons.star_border)),
+        IconButton(onPressed: () => setState(() => _trashOnly = !_trashOnly), icon: Icon(_trashOnly ? Icons.delete : Icons.delete_outline)),
+        IconButton(onPressed: _openSettings, icon: const Icon(Icons.tune)),
+        IconButton(onPressed: () => setState(() => _sortDesc = !_sortDesc), icon: Icon(_sortDesc ? Icons.arrow_downward : Icons.arrow_upward)),
+        IconButton(
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (BuildContext c) => const SettingsPage())),
+          icon: const Icon(Icons.settings),
+        ),
+      ],
     );
   }
 
@@ -340,186 +438,11 @@ class _NoteListPageState extends State<NoteListPage> {
                     await _notes.purgeTrashedForCurrentUser();
                   },
                 ),
-              ListTile(
-                leading: const Icon(Icons.logout),
-                title: const Text('Abmelden'),
-                onTap: () async {
-                  await Supabase.instance.client.auth.signOut();
-                  if (mounted) Navigator.of(c).pop();
-                },
-              ),
               const SizedBox(height: 8),
             ],
           ),
         );
       },
-    );
-  }
-
-  Widget _buildSearchBar() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-      child: SubmitSearchBar(
-        controller: _searchCtrl,
-        focusNode: _searchFocus,
-        onApply: (String q) => setState(() => _searchQuery = q),
-      ),
-    );
-  }
-
-  Widget _activeFiltersChips() {
-    final List<Widget> chips = <Widget>[];
-    if (_searchQuery.isNotEmpty) {
-      chips.add(InputChip(
-        label: Text('Suche: $_searchQuery'),
-        onDeleted: () => setState(() {
-          _searchQuery = '';
-          _searchCtrl.clear();
-          _searchFocus.requestFocus();
-        }),
-      ));
-    }
-    if (_selectedGroupId != null) {
-      Group? g;
-      try {
-        g = _groupsCache.firstWhere((Group e) => e.id == _selectedGroupId);
-      } catch (_) {
-        g = null;
-      }
-      final String name = g?.name ?? 'Gruppe';
-      chips.add(InputChip(
-        label: Text(name),
-        avatar: CircleAvatar(backgroundColor: _tileColorFor(_selectedGroupId)),
-        onDeleted: () => setState(() => _selectedGroupId = null),
-      ));
-    }
-    if (_favOnly) {
-      chips.add(InputChip(
-        label: const Text('Favoriten'),
-        avatar: const Icon(Icons.star, size: 18),
-        onDeleted: () => setState(() => _favOnly = false),
-      ));
-    }
-    if (_trashOnly) {
-      chips.add(InputChip(
-        label: const Text('Papierkorb'),
-        avatar: const Icon(Icons.delete_outline, size: 18),
-        onDeleted: () => setState(() => _trashOnly = false),
-      ));
-    }
-    if (chips.isEmpty) return const SizedBox(height: 8);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      child: Wrap(spacing: 8, runSpacing: 8, children: chips),
-    );
-  }
-
-  Widget _grid(BuildContext context, List<Note> notes) {
-    final double w = MediaQuery.of(context).size.width;
-    int cols = (w / 220).floor();
-    if (cols < 2) cols = 2;
-    if (cols > 6) cols = 6;
-
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: cols,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 0.9,
-      ),
-      itemCount: notes.length,
-      itemBuilder: (BuildContext context, int i) {
-        final Note n = notes[i];
-        final bool selected = _selectedIds.contains(n.id);
-        final Color tileColor = _tileColorFor(n.groupId);
-        return StickyNoteTile(
-          title: n.title,
-          content: n.content,
-          footer: _formatDate(n.createdAt),
-          selectionMode: _selectionMode,
-          selected: selected,
-          tileColor: tileColor,
-          isFavorite: n.isFavorite,
-          inTrash: _trashOnly,
-          onTap: () {
-            if (_selectionMode) {
-              _toggleSelected(n.id);
-            } else {
-              if (_trashOnly) return;
-              _openEditSheet(n);
-            }
-          },
-          onLongPress: () => _toggleSelectionMode(true),
-          onOpen: () async {
-            await Navigator.of(context).push(MaterialPageRoute(builder: (BuildContext c) => NoteDetailPage(note: n)));
-          },
-          onEdit: () => _openEditSheet(n),
-          onDuplicate: () async => _notes.duplicate(n),
-          onDelete: () async {
-            if (_trashOnly) {
-              final bool ok = await _confirmDelete(count: 1, permanent: true);
-              if (!ok) return;
-              await _notes.purge(n.id);
-            } else {
-              final bool ok = await _confirmDelete(count: 1);
-              if (!ok) return;
-              await _notes.moveToTrash(n.id);
-              _showUndoTrashSnackbar(<int>[n.id]);
-            }
-          },
-          onToggleFavorite: () async => _notes.setFavorite(n.id, !n.isFavorite),
-          onRestore: () async => _notes.restore(n.id),
-          onPurge: () async {
-            final bool ok = await _confirmDelete(count: 1, permanent: true);
-            if (!ok) return;
-            await _notes.purge(n.id);
-          },
-        );
-      },
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar(List<Note> visible) {
-    if (_selectionMode) {
-      return AppBar(
-        title: Text('${_selectedIds.length} ausgewählt'),
-        leading: IconButton(onPressed: () => _toggleSelectionMode(false), icon: const Icon(Icons.close)),
-        actions: <Widget>[
-          IconButton(onPressed: () => _deleteSelected(visible), icon: Icon(_trashOnly ? Icons.delete_forever : Icons.delete)),
-        ],
-      );
-    }
-    return AppBar(
-      title: const Text('Notizen'),
-      actions: <Widget>[
-        IconButton(
-          onPressed: _createGroupDialog,
-          icon: const Icon(Icons.folder),
-          tooltip: 'Neue Gruppe',
-        ),
-        IconButton(
-          onPressed: () => setState(() => _favOnly = !_favOnly),
-          icon: Icon(_favOnly ? Icons.star : Icons.star_border),
-          tooltip: _favOnly ? 'Nur Favoriten' : 'Alle Notizen',
-        ),
-        IconButton(
-          onPressed: () => setState(() => _trashOnly = !_trashOnly),
-          icon: Icon(_trashOnly ? Icons.delete : Icons.delete_outline),
-          tooltip: _trashOnly ? 'Papierkorb' : 'Papierkorb',
-        ),
-        IconButton(onPressed: _openSettings, icon: const Icon(Icons.tune)),
-        IconButton(
-          onPressed: () => setState(() => _sortDesc = !_sortDesc),
-          icon: Icon(_sortDesc ? Icons.arrow_downward : Icons.arrow_upward),
-          tooltip: _sortDesc ? 'Neueste zuerst' : 'Älteste zuerst',
-        ),
-        IconButton(
-          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (BuildContext c) => const SettingsPage())),
-          icon: const Icon(Icons.settings),
-          tooltip: 'Einstellungen',
-        ),
-      ],
     );
   }
 
@@ -597,22 +520,10 @@ class _NoteListPageState extends State<NoteListPage> {
           },
           child: Actions(
             actions: <Type, Action<Intent>>{
-              _NewNoteIntent: CallbackAction<_NewNoteIntent>(onInvoke: (_) {
-                _openCreateSheet();
-                return null;
-              }),
-              _FocusSearchIntent: CallbackAction<_FocusSearchIntent>(onInvoke: (_) {
-                _searchFocus.requestFocus();
-                return null;
-              }),
-              _ToggleFavFilterIntent: CallbackAction<_ToggleFavFilterIntent>(onInvoke: (_) {
-                setState(() => _favOnly = !_favOnly);
-                return null;
-              }),
-              _ToggleSortIntent: CallbackAction<_ToggleSortIntent>(onInvoke: (_) {
-                setState(() => _sortDesc = !_sortDesc);
-                return null;
-              }),
+              _NewNoteIntent: CallbackAction<_NewNoteIntent>(onInvoke: (_) { _openCreateSheet(); return null; }),
+              _FocusSearchIntent: CallbackAction<_FocusSearchIntent>(onInvoke: (_) { _searchFocus.requestFocus(); return null; }),
+              _ToggleFavFilterIntent: CallbackAction<_ToggleFavFilterIntent>(onInvoke: (_) { setState(() => _favOnly = !_favOnly); return null; }),
+              _ToggleSortIntent: CallbackAction<_ToggleSortIntent>(onInvoke: (_) { setState(() => _sortDesc = !_sortDesc); return null; }),
             },
             child: Focus(
               autofocus: true,

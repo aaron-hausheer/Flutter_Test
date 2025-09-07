@@ -11,13 +11,11 @@ class StickyNoteTile extends StatelessWidget {
   final bool inTrash;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
-  final VoidCallback onOpen;
-  final VoidCallback onEdit;
-  final VoidCallback onDuplicate;
   final VoidCallback onDelete;
   final VoidCallback onToggleFavorite;
   final VoidCallback onRestore;
   final VoidCallback onPurge;
+  final List<String> previewImageUrls;
 
   const StickyNoteTile({
     super.key,
@@ -31,86 +29,93 @@ class StickyNoteTile extends StatelessWidget {
     required this.inTrash,
     required this.onTap,
     required this.onLongPress,
-    required this.onOpen,
-    required this.onEdit,
-    required this.onDuplicate,
     required this.onDelete,
     required this.onToggleFavorite,
     required this.onRestore,
     required this.onPurge,
+    this.previewImageUrls = const <String>[],
   });
 
   @override
   Widget build(BuildContext context) {
-    final Brightness b = ThemeData.estimateBrightnessForColor(tileColor);
-    final Color fg = b == Brightness.dark ? Colors.white : Colors.black87;
-    final TextStyle titleStyle = Theme.of(context).textTheme.titleMedium!.copyWith(color: fg, fontWeight: FontWeight.w600);
-    final TextStyle bodyStyle = Theme.of(context).textTheme.bodyMedium!.copyWith(color: fg.withOpacity(0.95));
-    final TextStyle footStyle = Theme.of(context).textTheme.bodySmall!.copyWith(color: fg.withOpacity(0.9));
-
     return Material(
-      color: tileColor,
-      elevation: 2,
-      borderRadius: BorderRadius.circular(16),
+      color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
         onLongPress: onLongPress,
-        child: Padding(
-          padding: const EdgeInsets.all(14),
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            color: tileColor,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: <BoxShadow>[
+              BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8, offset: const Offset(0, 3)),
+            ],
+          ),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
               Row(
                 children: <Widget>[
-                  Expanded(child: Text(title.isEmpty ? 'Ohne Titel' : title, maxLines: 1, overflow: TextOverflow.ellipsis, style: titleStyle)),
-                  if (!inTrash)
+                  Expanded(
+                    child: Text(
+                      title.isEmpty ? 'Ohne Titel' : title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ),
+                  if (selectionMode)
+                    Checkbox(value: selected, onChanged: (_) => onLongPress())
+                  else
                     IconButton(
                       onPressed: onToggleFavorite,
-                      icon: Icon(isFavorite ? Icons.star : Icons.star_border, color: fg),
-                      tooltip: isFavorite ? 'Favorit entfernen' : 'Als Favorit markieren',
+                      icon: Icon(isFavorite ? Icons.star : Icons.star_border),
+                      tooltip: 'Favorit',
                     ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Expanded(child: Text(content.isEmpty ? 'Ohne Inhalt' : content, maxLines: 8, overflow: TextOverflow.ellipsis, style: bodyStyle)),
+              const SizedBox(height: 6),
+              Expanded(
+                child: Text(
+                  content.isEmpty ? 'Ohne Inhalt' : content,
+                  maxLines: 6,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (previewImageUrls.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 54,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: previewImageUrls.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 6),
+                    itemBuilder: (BuildContext context, int i) {
+                      return ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: Image.network(previewImageUrls[i], width: 72, height: 54, fit: BoxFit.cover),
+                      );
+                    },
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               Row(
                 children: <Widget>[
-                  Expanded(child: Text(footer, style: footStyle)),
-                  PopupMenuButton<String>(
-                    tooltip: 'Aktionen',
-                    icon: Icon(Icons.more_horiz, color: fg),
-                    itemBuilder: (BuildContext c) {
-                      if (inTrash) {
-                        return <PopupMenuEntry<String>>[
-                          const PopupMenuItem<String>(value: 'restore', child: ListTile(leading: Icon(Icons.restore), title: Text('Wiederherstellen'))),
-                          const PopupMenuItem<String>(value: 'purge', child: ListTile(leading: Icon(Icons.delete_forever), title: Text('Endgültig löschen'))),
-                        ];
-                      }
-                      return <PopupMenuEntry<String>>[
-                        const PopupMenuItem<String>(value: 'open', child: ListTile(leading: Icon(Icons.open_in_new), title: Text('Öffnen'))),
-                        const PopupMenuItem<String>(value: 'edit', child: ListTile(leading: Icon(Icons.edit), title: Text('Bearbeiten'))),
-                        const PopupMenuItem<String>(value: 'dup', child: ListTile(leading: Icon(Icons.copy), title: Text('Duplizieren'))),
-                        const PopupMenuItem<String>(value: 'del', child: ListTile(leading: Icon(Icons.delete), title: Text('In Papierkorb'))),
-                      ];
-                    },
-                    onSelected: (String v) {
-                      if (v == 'open') onOpen();
-                      if (v == 'edit') onEdit();
-                      if (v == 'dup') onDuplicate();
-                      if (v == 'del') onDelete();
-                      if (v == 'restore') onRestore();
-                      if (v == 'purge') onPurge();
-                    },
-                  ),
+                  Text(footer, style: Theme.of(context).textTheme.bodySmall),
+                  const Spacer(),
+                  if (inTrash)
+                    Row(
+                      children: <Widget>[
+                        IconButton(onPressed: onRestore, icon: const Icon(Icons.restore), tooltip: 'Wiederherstellen'),
+                        IconButton(onPressed: onPurge, icon: const Icon(Icons.delete_forever), tooltip: 'Endgültig löschen'),
+                      ],
+                    )
+                  else
+                    IconButton(onPressed: onDelete, icon: const Icon(Icons.delete_outline), tooltip: 'In Papierkorb'),
                 ],
               ),
-              if (selectionMode)
-                Align(
-                  alignment: Alignment.topLeft,
-                  child: Checkbox(value: selected, onChanged: (_) => onTap()),
-                ),
             ],
           ),
         ),
