@@ -10,3 +10,13 @@ Shortcuts:
 ⌘/Ctrl + K = Neue Notiz
 ⌘/Ctrl + L = Favoritenfilter
 Shift + S = Sortierung
+
+Users:
+
+Admin:
+E-Mail: admin@gmail.com
+Passwort: Admin1234
+
+User:
+E-Mail: user@gmail.com
+Passwort: User1234

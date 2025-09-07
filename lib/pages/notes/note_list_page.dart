@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:file_picker/file_picker.dart' show PlatformFile; // <— wichtig
 import '../../models/note.dart';
 import '../../models/group.dart';
+import '../../models/tag.dart';
 import '../../services/notes_service.dart';
 import '../../services/groups_service.dart';
+import '../../services/tags_service.dart';
+import '../../services/attachments_service.dart';
 import '../../widgets/search_bar.dart';
 import '../../widgets/note_editor_sheet.dart';
 import '../../widgets/admin_drawer.dart';
 import '../../widgets/group_filter_bar.dart';
 import '../../widgets/sticky_note_tile.dart';
 import 'note_detail_page.dart';
+import '../settings/settings_page.dart';
 
 class NoteListPage extends StatefulWidget {
   const NoteListPage({super.key});
@@ -21,15 +26,12 @@ class NoteListPage extends StatefulWidget {
 class _NewNoteIntent extends Intent {
   const _NewNoteIntent();
 }
-
 class _FocusSearchIntent extends Intent {
   const _FocusSearchIntent();
 }
-
 class _ToggleFavFilterIntent extends Intent {
   const _ToggleFavFilterIntent();
 }
-
 class _ToggleSortIntent extends Intent {
   const _ToggleSortIntent();
 }
@@ -39,6 +41,8 @@ class _NoteListPageState extends State<NoteListPage> {
   final FocusNode _searchFocus = FocusNode();
   final NotesService _notes = NotesService();
   final GroupsService _groups = GroupsService();
+  final TagsService _tags = TagsService();
+  final AttachmentsService _attachments = AttachmentsService();
 
   String _searchQuery = '';
   bool _sortDesc = true;
@@ -57,7 +61,12 @@ class _NoteListPageState extends State<NoteListPage> {
   }
 
   Stream<List<Note>> _noteStream() {
-    return _notes.streamForCurrentUser(sortDesc: _sortDesc, groupId: _selectedGroupId, favOnly: _favOnly, trashedOnly: _trashOnly);
+    return _notes.streamForCurrentUser(
+      sortDesc: _sortDesc,
+      groupId: _selectedGroupId,
+      favOnly: _favOnly,
+      trashedOnly: _trashOnly,
+    );
   }
 
   List<Note> _applyClientFilters(List<Note> all) {
@@ -92,7 +101,10 @@ class _NoteListPageState extends State<NoteListPage> {
   }
 
   Future<void> _createGroupDialog() async {
-    final List<String> palette = <String>['#FFF59D', '#FFE082', '#FFCC80', '#FFAB91', '#E1BEE7', '#BBDEFB', '#B2DFDB', '#C8E6C9'];
+    final List<String> palette = <String>[
+      '#FFF59D', '#FFE082', '#FFCC80', '#FFAB91',
+      '#E1BEE7', '#BBDEFB', '#B2DFDB', '#C8E6C9'
+    ];
     final TextEditingController ctrl = TextEditingController();
     final String? result = await showDialog<String>(
       context: context,
@@ -115,8 +127,7 @@ class _NoteListPageState extends State<NoteListPage> {
                       return InkWell(
                         onTap: () => setS(() => sel = i),
                         child: Container(
-                          width: 28,
-                          height: 28,
+                          width: 28, height: 28,
                           decoration: BoxDecoration(
                             color: _parseHexColor(palette[i]),
                             shape: BoxShape.circle,
@@ -148,7 +159,9 @@ class _NoteListPageState extends State<NoteListPage> {
 
   Future<void> _openCreateSheet() async {
     final List<Group> groups = await _groups.fetchAllForCurrentUser();
-    final NoteEditorResult? r = await showModalBottomSheet<NoteEditorResult>(
+    final List<Tag> allTags = await _tags.fetchAllForCurrentUser();
+
+    final NoteEditorResult? res = await showModalBottomSheet<NoteEditorResult>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -158,17 +171,30 @@ class _NoteListPageState extends State<NoteListPage> {
         isEditing: false,
         groups: groups,
         initialGroupId: _selectedGroupId,
+        availableTags: allTags,
+        initialTagIds: const <int>[],
       ),
     );
-    if (r == null) return;
-    if (!r.isDelete) {
-      await _notes.create(r.title, r.content, groupId: r.groupId);
+    if (res == null) return;
+    if (!res.isDelete) {
+      final int newId = await _notes.create(res.title, res.content, groupId: res.groupId, tagIds: res.tagIds);
+      // Bilder aus dem Editor übernehmen (falls vorhanden)
+      try {
+        final List<PlatformFile>? images = (res as dynamic).images as List<PlatformFile>?;
+        if (images != null && images.isNotEmpty) {
+          await _attachments.uploadFiles(newId, images);
+        }
+      } catch (_) {}
     }
   }
 
   Future<void> _openEditSheet(Note note) async {
     final List<Group> groups = await _groups.fetchAllForCurrentUser();
-    final NoteEditorResult? r = await showModalBottomSheet<NoteEditorResult>(
+    final List<Tag> allTags = await _tags.fetchAllForCurrentUser();
+    final List<Tag> noteTags = await _tags.tagsForNote(note.id);
+    final List<int> currentTagIds = noteTags.map((Tag t) => t.id).toList();
+
+    final NoteEditorResult? res = await showModalBottomSheet<NoteEditorResult>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -178,16 +204,26 @@ class _NoteListPageState extends State<NoteListPage> {
         isEditing: true,
         groups: groups,
         initialGroupId: note.groupId,
+        availableTags: allTags,
+        initialTagIds: currentTagIds,
       ),
     );
-    if (r == null) return;
-    if (r.isDelete) {
+    if (res == null) return;
+
+    if (res.isDelete) {
       final bool confirm = await _confirmDelete(count: 1);
       if (!confirm) return;
       await _notes.moveToTrash(note.id);
       _showUndoTrashSnackbar(<int>[note.id]);
     } else {
-      await _notes.update(note.id, r.title, r.content, groupId: r.groupId);
+      await _notes.update(note.id, res.title, res.content, groupId: res.groupId, tagIds: res.tagIds);
+      // Bilder ggf. hochladen
+      try {
+        final List<PlatformFile>? images = (res as dynamic).images as List<PlatformFile>?;
+        if (images != null && images.isNotEmpty) {
+          await _attachments.uploadFiles(note.id, images);
+        }
+      } catch (_) {}
     }
   }
 
@@ -344,7 +380,12 @@ class _NoteListPageState extends State<NoteListPage> {
       ));
     }
     if (_selectedGroupId != null) {
-      final Group? g = _groupsCache.where((Group e) => e.id == _selectedGroupId).cast<Group?>().firstWhere((Group? _) => true, orElse: () => null);
+      Group? g;
+      try {
+        g = _groupsCache.firstWhere((Group e) => e.id == _selectedGroupId);
+      } catch (_) {
+        g = null;
+      }
       final String name = g?.name ?? 'Gruppe';
       chips.add(InputChip(
         label: Text(name),
@@ -405,9 +446,7 @@ class _NoteListPageState extends State<NoteListPage> {
             if (_selectionMode) {
               _toggleSelected(n.id);
             } else {
-              if (_trashOnly) {
-                return;
-              }
+              if (_trashOnly) return;
               _openEditSheet(n);
             }
           },
@@ -471,11 +510,14 @@ class _NoteListPageState extends State<NoteListPage> {
         ),
         IconButton(onPressed: _openSettings, icon: const Icon(Icons.tune)),
         IconButton(
-          onPressed: () {
-            setState(() => _sortDesc = !_sortDesc);
-          },
+          onPressed: () => setState(() => _sortDesc = !_sortDesc),
           icon: Icon(_sortDesc ? Icons.arrow_downward : Icons.arrow_upward),
           tooltip: _sortDesc ? 'Neueste zuerst' : 'Älteste zuerst',
+        ),
+        IconButton(
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (BuildContext c) => const SettingsPage())),
+          icon: const Icon(Icons.settings),
+          tooltip: 'Einstellungen',
         ),
       ],
     );
@@ -532,9 +574,7 @@ class _NoteListPageState extends State<NoteListPage> {
                   }
                   return Expanded(
                     child: RefreshIndicator(
-                      onRefresh: () async {
-                        await _notes.refreshTick();
-                      },
+                      onRefresh: () async => _notes.refreshTick(),
                       child: _grid(context, visible),
                     ),
                   );
