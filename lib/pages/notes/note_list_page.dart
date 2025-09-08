@@ -15,6 +15,8 @@ import '../../widgets/group_filter_bar.dart';
 import '../../widgets/sticky_note_tile.dart';
 import 'note_detail_page.dart';
 import '../settings/settings_page.dart';
+import '../chat/chat_page.dart';
+
 
 class NoteListPage extends StatefulWidget {
   const NoteListPage({super.key});
@@ -378,12 +380,33 @@ class _NoteListPageState extends State<NoteListPage> {
       title: const Text('Notizen'),
       actions: <Widget>[
         IconButton(onPressed: _createGroupDialog, icon: const Icon(Icons.folder)),
-        IconButton(onPressed: () => setState(() => _favOnly = !_favOnly), icon: Icon(_favOnly ? Icons.star : Icons.star_border)),
-        IconButton(onPressed: () => setState(() => _trashOnly = !_trashOnly), icon: Icon(_trashOnly ? Icons.delete : Icons.delete_outline)),
-        IconButton(onPressed: _openSettings, icon: const Icon(Icons.tune)),
-        IconButton(onPressed: () => setState(() => _sortDesc = !_sortDesc), icon: Icon(_sortDesc ? Icons.arrow_downward : Icons.arrow_upward)),
         IconButton(
-          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (BuildContext c) => const SettingsPage())),
+          onPressed: () => setState(() => _favOnly = !_favOnly),
+          icon: Icon(_favOnly ? Icons.star : Icons.star_border),
+        ),
+        IconButton(
+          onPressed: () => setState(() => _trashOnly = !_trashOnly),
+          icon: Icon(_trashOnly ? Icons.delete : Icons.delete_outline),
+        ),
+
+        // NEU: Chat öffnen
+        IconButton(
+          tooltip: 'Chat',
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ChatPage()),
+          ),
+          icon: const Icon(Icons.chat_bubble_outline),
+        ),
+
+        IconButton(onPressed: _openSettings, icon: const Icon(Icons.tune)),
+        IconButton(
+          onPressed: () => setState(() => _sortDesc = !_sortDesc),
+          icon: Icon(_sortDesc ? Icons.arrow_downward : Icons.arrow_upward),
+        ),
+        IconButton(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (BuildContext c) => const SettingsPage()),
+          ),
           icon: const Icon(Icons.settings),
         ),
       ],

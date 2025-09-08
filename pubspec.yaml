@@ -12,8 +12,9 @@ dependencies:
     sdk: flutter
   file_picker: ^8.0.0
   uuid: ^4.4.0
-
+  http: ^1.5.0
   cupertino_icons: ^1.0.8
+  shared_preferences: ^2.3.2
 
   # Supabase Flutter SDK für CRUD über Supabase
   supabase_flutter: ^2.5.6
