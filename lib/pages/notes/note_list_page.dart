@@ -1,22 +1,32 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../models/note.dart';
 import '../../models/group.dart';
 import '../../models/tag.dart';
+
 import '../../services/notes_service.dart';
 import '../../services/groups_service.dart';
 import '../../services/tags_service.dart';
 import '../../services/attachments_service.dart';
+
 import '../../widgets/search_bar.dart';
 import '../../widgets/note_editor_sheet.dart';
 import '../../widgets/admin_drawer.dart';
 import '../../widgets/group_filter_bar.dart';
 import '../../widgets/sticky_note_tile.dart';
+
 import 'note_detail_page.dart';
 import '../settings/settings_page.dart';
 import '../chat/chat_page.dart';
 
+/// Kleines DTO für die Kartenanzeige (Bild-Previews + Tag-Zeile)
+class _CardData {
+  final List<String> previews;
+  final String tagsLine;
+  const _CardData(this.previews, this.tagsLine);
+}
 
 class NoteListPage extends StatefulWidget {
   const NoteListPage({super.key});
@@ -24,17 +34,30 @@ class NoteListPage extends StatefulWidget {
   State<NoteListPage> createState() => _NoteListPageState();
 }
 
-class _NewNoteIntent extends Intent { const _NewNoteIntent(); }
-class _FocusSearchIntent extends Intent { const _FocusSearchIntent(); }
-class _ToggleFavFilterIntent extends Intent { const _ToggleFavFilterIntent(); }
-class _ToggleSortIntent extends Intent { const _ToggleSortIntent(); }
+class _NewNoteIntent extends Intent {
+  const _NewNoteIntent();
+}
+
+class _FocusSearchIntent extends Intent {
+  const _FocusSearchIntent();
+}
+
+class _ToggleFavFilterIntent extends Intent {
+  const _ToggleFavFilterIntent();
+}
+
+class _ToggleSortIntent extends Intent {
+  const _ToggleSortIntent();
+}
 
 class _NoteListPageState extends State<NoteListPage> {
   final TextEditingController _searchCtrl = TextEditingController();
   final FocusNode _searchFocus = FocusNode();
+
   final NotesService _notes = NotesService();
   final GroupsService _groups = GroupsService();
   final AttachmentsService _attachments = AttachmentsService();
+  final TagsService _tags = TagsService();
 
   String _searchQuery = '';
   bool _sortDesc = true;
@@ -64,7 +87,11 @@ class _NoteListPageState extends State<NoteListPage> {
   List<Note> _applyClientFilters(List<Note> all) {
     final String q = _searchQuery.trim().toLowerCase();
     if (q.isEmpty) return all;
-    return all.where((Note n) => n.title.toLowerCase().contains(q) || n.content.toLowerCase().contains(q)).toList();
+    return all
+        .where((Note n) =>
+            n.title.toLowerCase().contains(q) ||
+            n.content.toLowerCase().contains(q))
+        .toList();
   }
 
   String _formatDate(DateTime dt) {
@@ -93,7 +120,16 @@ class _NoteListPageState extends State<NoteListPage> {
   }
 
   Future<void> _createGroupDialog() async {
-    final List<String> palette = <String>['#FFF59D', '#FFE082', '#FFCC80', '#FFAB91', '#E1BEE7', '#BBDEFB', '#B2DFDB', '#C8E6C9'];
+    final List<String> palette = <String>[
+      '#FFF59D',
+      '#FFE082',
+      '#FFCC80',
+      '#FFAB91',
+      '#E1BEE7',
+      '#BBDEFB',
+      '#B2DFDB',
+      '#C8E6C9'
+    ];
     final TextEditingController ctrl = TextEditingController();
     final String? result = await showDialog<String>(
       context: context,
@@ -106,7 +142,9 @@ class _NoteListPageState extends State<NoteListPage> {
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: <Widget>[
-                  TextField(controller: ctrl, decoration: const InputDecoration(labelText: 'Name')),
+                  TextField(
+                      controller: ctrl,
+                      decoration: const InputDecoration(labelText: 'Name')),
                   const SizedBox(height: 12),
                   Wrap(
                     spacing: 8,
@@ -121,7 +159,11 @@ class _NoteListPageState extends State<NoteListPage> {
                           decoration: BoxDecoration(
                             color: _parseHexColor(palette[i]),
                             shape: BoxShape.circle,
-                            border: Border.all(width: selected ? 3 : 1, color: selected ? Colors.black87 : Colors.black26),
+                            border: Border.all(
+                                width: selected ? 3 : 1,
+                                color: selected
+                                    ? Colors.black87
+                                    : Colors.black26),
                           ),
                         ),
                       );
@@ -130,8 +172,13 @@ class _NoteListPageState extends State<NoteListPage> {
                 ],
               ),
               actions: <Widget>[
-                TextButton(onPressed: () => Navigator.of(c).pop(null), child: const Text('Abbrechen')),
-                FilledButton(onPressed: () => Navigator.of(c).pop('${ctrl.text.trim()}|${palette[sel]}'), child: const Text('Erstellen')),
+                TextButton(
+                    onPressed: () => Navigator.of(c).pop(null),
+                    child: const Text('Abbrechen')),
+                FilledButton(
+                    onPressed: () =>
+                        Navigator.of(c).pop('${ctrl.text.trim()}|${palette[sel]}'),
+                    child: const Text('Erstellen')),
               ],
             );
           },
@@ -149,8 +196,7 @@ class _NoteListPageState extends State<NoteListPage> {
 
   Future<void> _openCreateSheet() async {
     final List<Group> groups = await _groups.fetchAllForCurrentUser();
-    final TagsService tagsSvc = TagsService();
-    final List<Tag> allTags = await tagsSvc.fetchAllForCurrentUser();
+    final List<Tag> allTags = await _tags.fetchAllForCurrentUser();
 
     final NoteEditorResult? r = await showModalBottomSheet<NoteEditorResult>(
       context: context,
@@ -192,11 +238,21 @@ class _NoteListPageState extends State<NoteListPage> {
       context: context,
       builder: (BuildContext c) {
         return AlertDialog(
-          title: Text(permanent ? (count == 1 ? 'Endgültig löschen?' : '$count endgültig löschen?') : (count == 1 ? 'In Papierkorb?' : '$count in Papierkorb?')),
-          content: Text(permanent ? 'Diese Aktion kann nicht rückgängig gemacht werden.' : 'Dies kann rückgängig gemacht werden.'),
+          title: Text(permanent
+              ? (count == 1
+                  ? 'Endgültig löschen?'
+                  : '$count endgültig löschen?')
+              : (count == 1 ? 'In Papierkorb?' : '$count in Papierkorb?')),
+          content: Text(permanent
+              ? 'Diese Aktion kann nicht rückgängig gemacht werden.'
+              : 'Dies kann rückgängig gemacht werden.'),
           actions: <Widget>[
-            TextButton(onPressed: () => Navigator.of(c).pop(false), child: const Text('Abbrechen')),
-            FilledButton.tonal(onPressed: () => Navigator.of(c).pop(true), child: Text(permanent ? 'Löschen' : 'Verschieben')),
+            TextButton(
+                onPressed: () => Navigator.of(c).pop(false),
+                child: const Text('Abbrechen')),
+            FilledButton.tonal(
+                onPressed: () => Navigator.of(c).pop(true),
+                child: Text(permanent ? 'Löschen' : 'Verschieben')),
           ],
         );
       },
@@ -226,7 +282,8 @@ class _NoteListPageState extends State<NoteListPage> {
 
     if (_trashOnly) {
       // Endgültig nur die ausgewählten löschen
-      final bool ok = await _confirmDelete(count: _selectedIds.length, permanent: true);
+      final bool ok =
+          await _confirmDelete(count: _selectedIds.length, permanent: true);
       if (!ok) return;
       for (final int id in _selectedIds) {
         await _notes.purge(id);
@@ -239,11 +296,18 @@ class _NoteListPageState extends State<NoteListPage> {
     if (!ok) return;
     await _notes.moveManyToTrash(_selectedIds);
     _toggleSelectionMode(false);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('In Papierkorb verschoben')));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(const SnackBar(content: Text('In Papierkorb verschoben')));
   }
 
-  Future<List<String>> _previewUrlsFor(int noteId) {
-    return _attachments.listUrls(noteId, limit: 3);
+  /// Liefert Previews + Tagzeile für eine Notizkarte
+  Future<_CardData> _cardDataFor(int noteId) async {
+    final List<String> previews =
+        await _attachments.listUrls(noteId, limit: 3);
+    final List<Tag> tags = await _tags.tagsForNote(noteId);
+    final String tagsLine =
+        tags.isEmpty ? '' : tags.map((t) => '#${t.name}').join('   ');
+    return _CardData(previews, tagsLine);
   }
 
   Widget _buildSearchBar() {
@@ -270,7 +334,10 @@ class _NoteListPageState extends State<NoteListPage> {
       ));
     }
     if (_selectedGroupId != null) {
-      final Group? g = _groupsCache.where((Group e) => e.id == _selectedGroupId).cast<Group?>().firstWhere((Group? _) => true, orElse: () => null);
+      final Group? g = _groupsCache
+          .where((Group e) => e.id == _selectedGroupId)
+          .cast<Group?>()
+          .firstWhere((Group? _) => true, orElse: () => null);
       final String name = g?.name ?? 'Gruppe';
       chips.add(InputChip(
         label: Text(name),
@@ -318,44 +385,56 @@ class _NoteListPageState extends State<NoteListPage> {
         final Note n = notes[i];
         final bool selected = _selectedIds.contains(n.id);
         final Color tileColor = _tileColorFor(n.groupId);
-        return FutureBuilder<List<String>>(
-          future: _previewUrlsFor(n.id),
-          builder: (BuildContext context, AsyncSnapshot<List<String>> snap) {
-            final List<String> previews = snap.data ?? const <String>[];
+
+        return FutureBuilder<_CardData>(
+          future: _cardDataFor(n.id),
+          builder: (BuildContext context, AsyncSnapshot<_CardData> snap) {
+            final _CardData cd =
+                snap.data ?? const _CardData(<String>[], '');
             return StickyNoteTile(
               title: n.title,
               content: n.content,
-              footer: _formatDate(n.createdAt),
+              // Statt Datum jetzt Tags im Footer:
+              footer: cd.tagsLine,
               selectionMode: _selectionMode,
               selected: selected,
               tileColor: tileColor,
               isFavorite: n.isFavorite,
               inTrash: _trashOnly,
-              previewImageUrls: previews,
+              previewImageUrls: cd.previews,
               onTap: () {
                 if (_selectionMode) {
                   _toggleSelected(n.id);
                   return;
                 }
-                Navigator.of(context).push(MaterialPageRoute(builder: (BuildContext _) => NoteDetailPage(note: n)));
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (BuildContext _) => NoteDetailPage(note: n),
+                  ),
+                );
               },
               onLongPress: () => _toggleSelectionMode(true),
               onDelete: () async {
                 if (_trashOnly) {
-                  final bool ok = await _confirmDelete(count: 1, permanent: true);
+                  final bool ok =
+                      await _confirmDelete(count: 1, permanent: true);
                   if (!ok) return;
                   await _notes.purge(n.id);
                 } else {
                   final bool ok = await _confirmDelete(count: 1);
                   if (!ok) return;
                   await _notes.moveToTrash(n.id);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('In Papierkorb verschoben')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('In Papierkorb verschoben')),
+                  );
                 }
               },
-              onToggleFavorite: () async => _notes.setFavorite(n.id, !n.isFavorite),
+              onToggleFavorite: () async =>
+                  _notes.setFavorite(n.id, !n.isFavorite),
               onRestore: () async => _notes.restore(n.id),
               onPurge: () async {
-                final bool ok = await _confirmDelete(count: 1, permanent: true);
+                final bool ok =
+                    await _confirmDelete(count: 1, permanent: true);
                 if (!ok) return;
                 await _notes.purge(n.id);
               },
@@ -370,16 +449,21 @@ class _NoteListPageState extends State<NoteListPage> {
     if (_selectionMode) {
       return AppBar(
         title: Text('${_selectedIds.length} ausgewählt'),
-        leading: IconButton(onPressed: () => _toggleSelectionMode(false), icon: const Icon(Icons.close)),
+        leading: IconButton(
+            onPressed: () => _toggleSelectionMode(false),
+            icon: const Icon(Icons.close)),
         actions: <Widget>[
-          IconButton(onPressed: () => _deleteSelected(visible), icon: Icon(_trashOnly ? Icons.delete_forever : Icons.delete)),
+          IconButton(
+              onPressed: () => _deleteSelected(visible),
+              icon: Icon(_trashOnly ? Icons.delete_forever : Icons.delete)),
         ],
       );
     }
     return AppBar(
       title: const Text('Notizen'),
       actions: <Widget>[
-        IconButton(onPressed: _createGroupDialog, icon: const Icon(Icons.folder)),
+        IconButton(
+            onPressed: _createGroupDialog, icon: const Icon(Icons.folder)),
         IconButton(
           onPressed: () => setState(() => _favOnly = !_favOnly),
           icon: Icon(_favOnly ? Icons.star : Icons.star_border),
@@ -398,14 +482,14 @@ class _NoteListPageState extends State<NoteListPage> {
           icon: const Icon(Icons.chat_bubble_outline),
         ),
 
-        IconButton(onPressed: _openSettings, icon: const Icon(Icons.tune)),
         IconButton(
           onPressed: () => setState(() => _sortDesc = !_sortDesc),
           icon: Icon(_sortDesc ? Icons.arrow_downward : Icons.arrow_upward),
         ),
         IconButton(
           onPressed: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (BuildContext c) => const SettingsPage()),
+            MaterialPageRoute(
+                builder: (BuildContext c) => const SettingsPage()),
           ),
           icon: const Icon(Icons.settings),
         ),
@@ -427,7 +511,8 @@ class _NoteListPageState extends State<NoteListPage> {
               ListTile(
                 leading: const Icon(Icons.swap_vert),
                 title: const Text('Sortierung'),
-                subtitle: Text(_sortDesc ? 'Neueste zuerst' : 'Älteste zuerst'),
+                subtitle:
+                    Text(_sortDesc ? 'Neueste zuerst' : 'Älteste zuerst'),
                 onTap: () {
                   setState(() => _sortDesc = !_sortDesc);
                   Navigator.of(c).pop();
@@ -436,7 +521,10 @@ class _NoteListPageState extends State<NoteListPage> {
               ListTile(
                 leading: const Icon(Icons.select_all),
                 title: const Text('Mehrfachauswahl'),
-                trailing: Switch(value: _selectionMode, onChanged: (bool v) => setState(() => _selectionMode = v)),
+                trailing: Switch(
+                    value: _selectionMode,
+                    onChanged: (bool v) =>
+                        setState(() => _selectionMode = v)),
                 onTap: () {
                   _toggleSelectionMode();
                   Navigator.of(c).pop();
@@ -456,7 +544,8 @@ class _NoteListPageState extends State<NoteListPage> {
                   title: const Text('Papierkorb leeren'),
                   onTap: () async {
                     Navigator.of(c).pop();
-                    final bool ok = await _confirmDelete(count: 0, permanent: true);
+                    final bool ok =
+                        await _confirmDelete(count: 0, permanent: true);
                     if (!ok) return;
                     await _notes.purgeTrashedForCurrentUser();
                   },
@@ -480,38 +569,54 @@ class _NoteListPageState extends State<NoteListPage> {
             _activeFiltersChips(),
             StreamBuilder<List<Group>>(
               stream: _groups.streamForCurrentUser(),
-              builder: (BuildContext context, AsyncSnapshot<List<Group>> gs) {
+              builder:
+                  (BuildContext context, AsyncSnapshot<List<Group>> gs) {
                 final List<Group> groups = gs.data ?? const <Group>[];
                 _groupsCache = groups;
                 return GroupFilterBar(
                   groups: groups,
                   selectedGroupId: _selectedGroupId,
-                  onSelected: (int? id) => setState(() => _selectedGroupId = id),
+                  onSelected: (int? id) =>
+                      setState(() => _selectedGroupId = id),
                   onCreateTap: _createGroupDialog,
                 );
               },
             ),
             if (snapshot.connectionState == ConnectionState.waiting)
-              const Expanded(child: Center(child: CircularProgressIndicator()))
+              const Expanded(
+                  child: Center(child: CircularProgressIndicator()))
             else if (snapshot.hasError)
-              Expanded(child: Center(child: Text('Fehler: ${snapshot.error}')))
+              Expanded(
+                  child:
+                      Center(child: Text('Fehler: ${snapshot.error}')))
             else
               Builder(
                 builder: (BuildContext _) {
-                  final List<Note> notes = snapshot.data ?? const <Note>[];
-                  final List<Note> visible = _applyClientFilters(notes);
+                  final List<Note> notes =
+                      snapshot.data ?? const <Note>[];
+                  final List<Note> visible =
+                      _applyClientFilters(notes);
                   if (visible.isEmpty) {
                     return Expanded(
                       child: Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: <Widget>[
-                            Icon(_trashOnly ? Icons.delete_outline : Icons.note_add, size: 48),
+                            Icon(
+                                _trashOnly
+                                    ? Icons.delete_outline
+                                    : Icons.note_add,
+                                size: 48),
                             const SizedBox(height: 8),
-                            Text(_trashOnly ? 'Papierkorb ist leer' : 'Noch keine Notizen'),
+                            Text(_trashOnly
+                                ? 'Papierkorb ist leer'
+                                : 'Noch keine Notizen'),
                             if (!_trashOnly) ...<Widget>[
                               const SizedBox(height: 8),
-                              FilledButton.icon(onPressed: _openCreateSheet, icon: const Icon(Icons.add), label: const Text('Neu')),
+                              FilledButton.icon(
+                                  onPressed: _openCreateSheet,
+                                  icon: const Icon(Icons.add),
+                                  label: const Text('Neu')),
                             ],
                           ],
                         ),
@@ -529,24 +634,50 @@ class _NoteListPageState extends State<NoteListPage> {
           ],
         );
 
-        final List<Note> visibleForActions = _applyClientFilters(snapshot.data ?? const <Note>[]);
+        final List<Note> visibleForActions =
+            _applyClientFilters(snapshot.data ?? const <Note>[]);
 
         return Shortcuts(
           shortcuts: <LogicalKeySet, Intent>{
-            LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyF): const _FocusSearchIntent(),
-            LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyF): const _FocusSearchIntent(),
-            LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyK): const _NewNoteIntent(),
-            LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyK): const _NewNoteIntent(),
-            LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyL): const _ToggleFavFilterIntent(),
-            LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyL): const _ToggleFavFilterIntent(),
-            LogicalKeySet(LogicalKeyboardKey.shift, LogicalKeyboardKey.keyS): const _ToggleSortIntent(),
+            LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyF):
+                const _FocusSearchIntent(),
+            LogicalKeySet(
+                    LogicalKeyboardKey.control, LogicalKeyboardKey.keyF):
+                const _FocusSearchIntent(),
+            LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyK):
+                const _NewNoteIntent(),
+            LogicalKeySet(
+                    LogicalKeyboardKey.control, LogicalKeyboardKey.keyK):
+                const _NewNoteIntent(),
+            LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyL):
+                const _ToggleFavFilterIntent(),
+            LogicalKeySet(
+                    LogicalKeyboardKey.control, LogicalKeyboardKey.keyL):
+                const _ToggleFavFilterIntent(),
+            LogicalKeySet(LogicalKeyboardKey.shift, LogicalKeyboardKey.keyS):
+                const _ToggleSortIntent(),
           },
           child: Actions(
             actions: <Type, Action<Intent>>{
-              _NewNoteIntent: CallbackAction<_NewNoteIntent>(onInvoke: (_) { _openCreateSheet(); return null; }),
-              _FocusSearchIntent: CallbackAction<_FocusSearchIntent>(onInvoke: (_) { _searchFocus.requestFocus(); return null; }),
-              _ToggleFavFilterIntent: CallbackAction<_ToggleFavFilterIntent>(onInvoke: (_) { setState(() => _favOnly = !_favOnly); return null; }),
-              _ToggleSortIntent: CallbackAction<_ToggleSortIntent>(onInvoke: (_) { setState(() => _sortDesc = !_sortDesc); return null; }),
+              _NewNoteIntent: CallbackAction<_NewNoteIntent>(onInvoke: (_) {
+                _openCreateSheet();
+                return null;
+              }),
+              _FocusSearchIntent:
+                  CallbackAction<_FocusSearchIntent>(onInvoke: (_) {
+                _searchFocus.requestFocus();
+                return null;
+              }),
+              _ToggleFavFilterIntent:
+                  CallbackAction<_ToggleFavFilterIntent>(onInvoke: (_) {
+                setState(() => _favOnly = !_favOnly);
+                return null;
+              }),
+              _ToggleSortIntent:
+                  CallbackAction<_ToggleSortIntent>(onInvoke: (_) {
+                setState(() => _sortDesc = !_sortDesc);
+                return null;
+              }),
             },
             child: Focus(
               autofocus: true,

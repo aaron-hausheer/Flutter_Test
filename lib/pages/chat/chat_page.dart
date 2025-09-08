@@ -7,7 +7,7 @@ import 'package:http/http.dart' as http;
 const String kChatEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
 
 /// Dein OpenRouter API-Key (im Code = öffentlich! Nur zu Testen/Prototyping verwenden)
-const String kOpenRouterApiKey = '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';
+const String kOpenRouterApiKey = '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';
 
 /// Ein Model-Slug von OpenRouter (z.B. 'openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet')
 const String kModelSlug = 'openai/gpt-3.5-turbo';
