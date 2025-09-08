@@ -72,6 +72,15 @@ Insgesamt war mir wichtig, dass die Navigation klar und intuitiv ist, sodass neu
 - Shift + S = Sortierung  
 
 ---
+## Seiten
+- Login/Registrieren
+- Dashboard
+- Einstellungen
+- Chatbot
+- Benutzerverwaltung
+- Statistiken
+
+---
 
 ## Users
 ### Admin
