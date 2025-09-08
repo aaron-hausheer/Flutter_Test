@@ -484,7 +484,7 @@ class _NoteListPageState extends State<NoteListPage> {
       );
     }
     return AppBar(
-      title: const Text('Notizen'),
+      title: const Text('Notive'),
       actions: <Widget>[
         IconButton(
           tooltip: 'Neue Gruppe erstellen',

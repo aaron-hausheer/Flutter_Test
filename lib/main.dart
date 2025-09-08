@@ -16,7 +16,7 @@ class CrudApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Notes',
+      title: 'Notive',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.system,
       theme: appTheme(),
