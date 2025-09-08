@@ -26,17 +26,6 @@ Das Ziel der App ist die einfache und schnelle Verwaltung von Notizen. Nutzerinn
 - Es gibt einen Chatbot, der auf **OpenAI GPT-3.5-Turbo** basiert.  
 - Mit ihm kann man chatten und ihm Fragen stellen.
 
-### Admin
-
-#### Benutzerverwaltung
-- In der Benutzerverwaltung können Admins alle User mit Notizen sehen.  
-- Sie können deren Notizen anzeigen und im Notfall auch löschen.  
-- Das ist wichtig, um die Website gut zu verwalten.
-
-#### Statistiken
-- Für Admins gibt es auch noch eine Statistik-Seite.  
-- Dort sehen sie aktuelle Statistiken wie die Anzahl Notizen, wann sie erstellt wurden, aktivste Nutzer, etc.
-
 ### Sortierung
 - Man kann seine Notizen auf verschiedene Arten anzeigen lassen.  
 - Standardmäßig werden einfach alle angezeigt.  
@@ -54,6 +43,17 @@ Das Ziel der App ist die einfache und schnelle Verwaltung von Notizen. Nutzerinn
   - Die Einstellungen öffnen  
 - Admins haben außerdem noch ein Burger-Menü, mit welchem sie auf die beiden Admin-Seiten gelangen.
 
+---
+## Admin Funktionen
+
+#### Benutzerverwaltung
+- In der Benutzerverwaltung können Admins alle User mit Notizen sehen.  
+- Sie können deren Notizen anzeigen und im Notfall auch löschen.  
+- Das ist wichtig, um die Website gut zu verwalten.
+
+#### Statistiken
+- Für Admins gibt es auch noch eine Statistik-Seite.  
+- Dort sehen sie aktuelle Statistiken wie die Anzahl Notizen, wann sie erstellt wurden, aktivste Nutzer, etc.
 ---
 
 ## Design
