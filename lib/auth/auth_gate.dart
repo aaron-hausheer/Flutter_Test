@@ -9,6 +9,12 @@ class AuthGate extends StatefulWidget {
 }
 
 class _AuthGateState extends State<AuthGate> {
+  void _syncRealtime(Session? s) {
+    final SupabaseClient sb = Supabase.instance.client;
+    final String token = s?.accessToken ?? '';
+    sb.realtime.setAuth(token);
+  }
+
   @override
   Widget build(BuildContext context) {
     final SupabaseClient sb = Supabase.instance.client;
@@ -16,6 +22,7 @@ class _AuthGateState extends State<AuthGate> {
       stream: sb.auth.onAuthStateChange,
       builder: (BuildContext context, AsyncSnapshot<AuthState> snapshot) {
         final Session? session = sb.auth.currentSession;
+        _syncRealtime(session);
         if (session == null) return const _LoginPage();
         return widget.child;
       },
