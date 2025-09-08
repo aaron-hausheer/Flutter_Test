@@ -487,30 +487,34 @@ class _NoteListPageState extends State<NoteListPage> {
       title: const Text('Notizen'),
       actions: <Widget>[
         IconButton(
-            onPressed: _createGroupDialog, icon: const Icon(Icons.folder)),
+          tooltip: 'Neue Gruppe erstellen',
+          onPressed: _createGroupDialog,
+          icon: const Icon(Icons.folder),
+        ),
         IconButton(
+          tooltip: _favOnly ? 'Favoritenfilter deaktivieren' : 'Nur Favoriten anzeigen',
           onPressed: () => setState(() => _favOnly = !_favOnly),
           icon: Icon(_favOnly ? Icons.star : Icons.star_border),
         ),
         IconButton(
+          tooltip: _trashOnly ? 'Papierkorb verlassen' : 'Papierkorb anzeigen',
           onPressed: () => setState(() => _trashOnly = !_trashOnly),
           icon: Icon(_trashOnly ? Icons.delete : Icons.delete_outline),
         ),
-
-        // NEU: Chat öffnen
         IconButton(
-          tooltip: 'Chat',
+          tooltip: 'Chat öffnen',
           onPressed: () => Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const ChatPage()),
           ),
           icon: const Icon(Icons.chat_bubble_outline),
         ),
-
         IconButton(
+          tooltip: _sortDesc ? 'Sortierung: Neueste zuerst' : 'Sortierung: Älteste zuerst',
           onPressed: () => setState(() => _sortDesc = !_sortDesc),
           icon: Icon(_sortDesc ? Icons.arrow_downward : Icons.arrow_upward),
         ),
         IconButton(
+          tooltip: 'Einstellungen öffnen',
           onPressed: () => Navigator.of(context).push(
             MaterialPageRoute(
                 builder: (BuildContext c) => const SettingsPage()),
