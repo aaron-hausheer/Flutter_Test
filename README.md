@@ -13,15 +13,18 @@ Funktionen:
     Einstellungen:
 
     AI Chatbot:
+        Es gibt einen Chatbot der auf openai gpt-3.5-turbo basiert. Mit ihm kann man chatten und ihm fragen stellen.
 
     Admin:
 
         Benutzerverwaltung:
+            In der Benutzerverwaltung können Admins alle User mit Notizen sehen und ihre Notizen anzegeigen und im Notfall auch löschen. Das ist wichtig um die Website gut zu verwalten.
 
         Satistiken:
+            Für Admins gibt es auch noch eine Statistiken Seite auf der Sie aktuelle Statistiken wie die anzahl Notizen, wann sie erstellt wurden, aktivste Nuter, etc. sehen können.
     
     Sortierung:
-
+        Man kann seine Notizen auf verschiedene Arten anzeigen lassen. Standardmässig werden einfach alle angezeigt. Man kann zuerst neue oder alte anzeigen lassen. Man kann auch nach den verschiedenen Gruppen sortieren. Es gibt auch die Möglchkeit Favoriten, den Papierkorb oder beides Zusammen anzuzeigen.
 
 Design:
 

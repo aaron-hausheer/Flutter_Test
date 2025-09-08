@@ -67,6 +67,7 @@ class _NoteListPageState extends State<NoteListPage> {
   final Set<int> _selectedIds = <int>{};
   int? _selectedGroupId;
   List<Group> _groupsCache = const <Group>[];
+  bool _isAdmin = false;
 
   @override
   void dispose() {
@@ -74,6 +75,13 @@ class _NoteListPageState extends State<NoteListPage> {
     _searchFocus.dispose();
     super.dispose();
   }
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAdmin();   // 👈 hier aufrufen
+  }
+
 
   Stream<List<Note>> _noteStream() {
     return _notes.streamForCurrentUser(
@@ -83,6 +91,22 @@ class _NoteListPageState extends State<NoteListPage> {
       trashedOnly: _trashOnly,
     );
   }
+
+    Future<void> _checkAdmin() async {
+    final uid = Supabase.instance.client.auth.currentUser?.id;
+    if (uid == null) return;
+
+    final res = await Supabase.instance.client
+        .from('profiles')
+        .select('role')
+        .eq('id', uid)
+        .maybeSingle();
+
+    if (mounted && res != null && res['role'] == 'admin') {
+      setState(() => _isAdmin = true);
+    }
+  }
+
 
   List<Note> _applyClientFilters(List<Note> all) {
     final String q = _searchQuery.trim().toLowerCase();
@@ -683,7 +707,7 @@ class _NoteListPageState extends State<NoteListPage> {
               autofocus: true,
               child: Scaffold(
                 appBar: _buildAppBar(visibleForActions),
-                drawer: const AdminDrawer(),
+                drawer: _isAdmin ? const AdminDrawer() : null,
                 floatingActionButton: _trashOnly
                     ? null
                     : FloatingActionButton.extended(
