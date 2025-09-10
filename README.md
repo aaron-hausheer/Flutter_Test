@@ -25,6 +25,8 @@ Das Ziel der App ist die einfache und schnelle Verwaltung von Notizen. Nutzerinn
 ### AI Chatbot
 - Es gibt einen Chatbot, der auf **OpenAI GPT-3.5-Turbo** basiert.  
 - Mit ihm kann man chatten und ihm Fragen stellen.
+- Wenn man mit "Notiz:" anfängt, wird eine Notiz mit allem was danach kommt erstellt.
+- Wenn man nach "Notiz:" noch "titel:" und "beschreibung:" schreibt, kann man nach dem doppelpunkt noch sagen was Titel und was Beschreibung sein soll.
 
 ### Sortierung
 - Man kann seine Notizen auf verschiedene Arten anzeigen lassen.  

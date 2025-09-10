@@ -1,18 +1,11 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// ==== HIER DEINE FESTEN WERTE EINTRAGEN ====
-/// OpenRouter Chat Completions Endpoint:
 const String kChatEndpoint = 'https://openrouter.ai/api/v1/chat/completions';
-
-/// Dein OpenRouter API-Key (im Code = öffentlich! Nur zu Testen/Prototyping verwenden)
 const String kOpenRouterApiKey = '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';
-
-/// Ein Model-Slug von OpenRouter (z.B. 'openai/gpt-4o-mini', 'anthropic/claude-3.5-sonnet')
 const String kModelSlug = 'openai/gpt-3.5-turbo';
-
-/// Optional, schöne Metadaten (werden bei Web akzeptiert, kein Muss)
 const String kXTitle = 'My Flutter Notes Chat';
 
 class ChatPage extends StatefulWidget {
@@ -25,6 +18,7 @@ class _ChatPageState extends State<ChatPage> {
   final List<Map<String, String>> _messages = <Map<String, String>>[];
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
+  final SupabaseClient _sb = Supabase.instance.client;
   bool _busy = false;
 
   @override
@@ -34,13 +28,55 @@ class _ChatPageState extends State<ChatPage> {
     super.dispose();
   }
 
+  Future<void> _createNoteFromAI(String content) async {
+    final uid = _sb.auth.currentUser?.id;
+    if (uid == null) return;
+
+    String title = 'AI Notiz';
+    String body = content;
+
+    if (content.toLowerCase().contains('titel:') &&
+        content.toLowerCase().contains('beschreibung:')) {
+      final titlePart = RegExp(r'titel:(.*?)beschreibung:', caseSensitive: false)
+          .firstMatch(content)
+          ?.group(1)
+          ?.trim();
+      final descPart = RegExp(r'beschreibung:(.*)', caseSensitive: false)
+          .firstMatch(content)
+          ?.group(1)
+          ?.trim();
+
+      if (titlePart != null && titlePart.isNotEmpty) title = titlePart;
+      if (descPart != null && descPart.isNotEmpty) body = descPart;
+    }
+
+    await _sb.from('notes').insert({
+      'user_id': uid,
+      'title': title,
+      'content': body,
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Notiz gespeichert')),
+      );
+    }
+  }
+
   Future<void> _send() async {
     final String text = _input.text.trim();
     if (text.isEmpty || _busy) return;
 
     _input.clear();
+
+    // 👇 Direkt speichern, keine AI-Antwort
+    if (text.toUpperCase().startsWith('NOTIZ:')) {
+      await _createNoteFromAI(text.substring(6).trim());
+      return;
+    }
+
     setState(() {
-      _messages.add(<String, String>{"role": "user", "content": text});
+      _messages.add({"role": "user", "content": text});
       _busy = true;
     });
 
@@ -63,22 +99,23 @@ class _ChatPageState extends State<ChatPage> {
         },
         body: jsonEncode(<String, dynamic>{
           'model': kModelSlug,
-          'messages': _messages, // ganzer Verlauf
+          'messages': _messages,
         }),
       );
 
       if (res.statusCode == 200) {
-        final Map<String, dynamic> data = jsonDecode(res.body) as Map<String, dynamic>;
+        final Map<String, dynamic> data =
+            jsonDecode(res.body) as Map<String, dynamic>;
         final String reply =
             (data['choices'] as List).first['message']['content'] as String? ??
-            '(keine Antwort)';
+                '(keine Antwort)';
         setState(() {
-          _messages.add(<String, String>{"role": "assistant", "content": reply});
+          _messages.add({"role": "assistant", "content": reply});
           _busy = false;
         });
       } else {
         setState(() {
-          _messages.add(<String, String>{
+          _messages.add({
             "role": "assistant",
             "content": "API-Fehler ${res.statusCode}: ${res.body}",
           });
@@ -87,7 +124,7 @@ class _ChatPageState extends State<ChatPage> {
       }
     } catch (e) {
       setState(() {
-        _messages.add(<String, String>{
+        _messages.add({
           "role": "assistant",
           "content": "Netzwerkfehler: $e",
         });
@@ -115,7 +152,8 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
-    final bool missingKey = kOpenRouterApiKey.isEmpty || kOpenRouterApiKey.contains('XXXX');
+    final bool missingKey =
+        kOpenRouterApiKey.isEmpty || kOpenRouterApiKey.contains('XXXX');
 
     return Scaffold(
       appBar: AppBar(title: const Text('Chat')),
@@ -123,7 +161,8 @@ class _ChatPageState extends State<ChatPage> {
         children: <Widget>[
           if (missingKey)
             const MaterialBanner(
-              content: Text('Trage einen gültigen OpenRouter API-Key in chat_page.dart ein.'),
+              content: Text(
+                  'Trage einen gültigen OpenRouter API-Key in chat_page.dart ein.'),
               actions: <Widget>[],
             ),
           Expanded(
@@ -134,7 +173,10 @@ class _ChatPageState extends State<ChatPage> {
               itemBuilder: (_, int i) => _bubble(_messages[i]),
             ),
           ),
-          if (_busy) const Padding(padding: EdgeInsets.only(bottom: 8), child: CircularProgressIndicator()),
+          if (_busy)
+            const Padding(
+                padding: EdgeInsets.only(bottom: 8),
+                child: CircularProgressIndicator()),
           SafeArea(
             top: false,
             child: Padding(
@@ -155,7 +197,8 @@ class _ChatPageState extends State<ChatPage> {
                           borderRadius: BorderRadius.circular(24),
                           borderSide: BorderSide.none,
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
                       ),
                     ),
                   ),
