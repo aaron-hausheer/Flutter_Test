@@ -95,5 +95,14 @@ Insgesamt war mir wichtig, dass die Navigation klar und intuitiv ist, sodass neu
 
 ---
 
+## Zusätzliche Daten
+### Datenbank
+[supabase](https://supabase.com)
+
+### Deploy
+[firebase](https://firebase.com)
+
+---
+
 ## Website
 [notive.com](https://flutter-test-c2aca.web.app)
