@@ -59,11 +59,17 @@ Das Ziel der App ist die einfache und schnelle Verwaltung von Notizen. Nutzerinn
 ---
 
 ## Design
-Ich habe beim Design darauf geachtet, dass die App übersichtlich und einfach zu bedienen ist.  
-Die Farben sind bewusst eher dezent und hell gewählt, damit die Inhalte im Vordergrund stehen.  
-Die Kartenansicht für die Notizen sorgt dafür, dass man schnell einen Überblick hat, und durch die Farbcodes der Gruppen kann man Inhalte besser unterscheiden.  
-Außerdem habe ich Tooltips und klare Icons eingesetzt, damit man auch ohne lange Erklärungen versteht, was welche Funktion macht.  
-Insgesamt war mir wichtig, dass die Navigation klar und intuitiv ist, sodass neue Benutzer die App ohne große Einarbeitung nutzen können.
+Ich habe beim Design darauf geachtet, dass die App übersichtlich und einfach zu bedienen ist.
+Die Farben sind bewusst eher dezent und hell gewählt, damit die Inhalte im Vordergrund stehen.
+Durch das Postit Design der Notizen, kann man die Notizen einfach unterscheiden und hat eine bessere User Experience.
+Dadurch das Gruppen eigene Farben haben, hat man schneller und besser Notizen auseinander halten und hat einen besseren Überlick.
+
+---
+
+## Navigation
+Durch Tooltips und passende Icons hat man eine einach verständliche Navigation.
+Der grossteil der Navigation findet im NavMenu im Header der Seite statt. Dadurch hat man alles an einem Ort.
+Für Admins gibt es zusätzlich noch ein Burger Menu mit eigenen Seiten. Das Burger Menu ist gewählt damit man Admin von normalen Seiten unterscheiden kann und wenn noch mehr Seiten dazu kommt das NavMenu nicht zu vollgesopft aussieht.
 
 ---
 
@@ -73,10 +79,13 @@ Insgesamt war mir wichtig, dass die Navigation klar und intuitiv ist, sodass neu
 - ⌘/Ctrl + L = Favoritenfilter  
 - Shift + S = Sortierung  
 
+Shortcuts können je nach Betriebssystem und Browser Probleme machen!
+
 ---
 ## Seiten
 - Login/Registrieren
 - Dashboard
+- Detail / Edit
 - Einstellungen
 - Chatbot
 - Benutzerverwaltung
@@ -102,7 +111,5 @@ Insgesamt war mir wichtig, dass die Navigation klar und intuitiv ist, sodass neu
 ### Deploy
 [firebase](https://firebase.com)
 
----
-
-## Website
+### Website
 [notive.com](https://flutter-test-c2aca.web.app)
