@@ -21,6 +21,7 @@ import 'note_detail_page.dart';
 import '../settings/settings_page.dart';
 import '../chat/chat_page.dart';
 
+
 /// Kleines DTO für die Kartenanzeige (Bild-Previews + Tag-Zeile)
 class _CardData {
   final List<String> previews;
@@ -245,6 +246,12 @@ class _NoteListPageState extends State<NoteListPage> {
       groupId: r.groupId,
       tagIds: r.tagIds,
     );
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Notiz erfolgreich erstellt')),
+      );
+    }
 
     // 2) Falls Bilder ausgewählt: hochladen
     if (r.images.isNotEmpty) {
@@ -513,6 +520,20 @@ class _NoteListPageState extends State<NoteListPage> {
           onPressed: () => setState(() => _sortDesc = !_sortDesc),
           icon: Icon(_sortDesc ? Icons.arrow_downward : Icons.arrow_upward),
         ),
+        // 👇 NEU: Logout-Button
+        IconButton(
+          tooltip: 'Abmelden',
+          onPressed: () async {
+            await Supabase.instance.client.auth.signOut();
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Du wurdest erfolgreich ausgeloggt')),
+              );
+              Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+            }
+          },
+          icon: const Icon(Icons.logout),
+        ),
         IconButton(
           tooltip: 'Einstellungen öffnen',
           onPressed: () => Navigator.of(context).push(
@@ -556,6 +577,23 @@ class _NoteListPageState extends State<NoteListPage> {
                 onTap: () {
                   _toggleSelectionMode();
                   Navigator.of(c).pop();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('Ausloggen'),
+                onTap: () async {
+                  await Supabase.instance.client.auth.signOut();
+
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Du wurdest erfolgreich ausgeloggt')),
+                    );
+                  }
+
+                  // Danach zurück zum Login leiten
+                  Navigator.of(context)
+                      .pushNamedAndRemoveUntil('/login', (route) => false);
                 },
               ),
               ListTile(

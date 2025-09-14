@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -18,6 +19,7 @@ class _ChatPageState extends State<ChatPage> {
   final List<Map<String, String>> _messages = <Map<String, String>>[];
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
+  final FocusNode _focusNode = FocusNode();
   final SupabaseClient _sb = Supabase.instance.client;
   bool _busy = false;
 
@@ -25,6 +27,7 @@ class _ChatPageState extends State<ChatPage> {
   void dispose() {
     _input.dispose();
     _scroll.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -35,13 +38,13 @@ class _ChatPageState extends State<ChatPage> {
     String title = 'AI Notiz';
     String body = content;
 
-    if (content.toLowerCase().contains('titel:') &&
-        content.toLowerCase().contains('beschreibung:')) {
-      final titlePart = RegExp(r'titel:(.*?)beschreibung:', caseSensitive: false)
+    if (content.toLowerCase().contains('title:') &&
+        content.toLowerCase().contains('description:')) {
+      final titlePart = RegExp(r'title:(.*?)description:', caseSensitive: false)
           .firstMatch(content)
           ?.group(1)
           ?.trim();
-      final descPart = RegExp(r'beschreibung:(.*)', caseSensitive: false)
+      final descPart = RegExp(r'description:(.*)', caseSensitive: false)
           .firstMatch(content)
           ?.group(1)
           ?.trim();
@@ -69,7 +72,6 @@ class _ChatPageState extends State<ChatPage> {
 
     _input.clear();
 
-    // 👇 Direkt speichern, keine AI-Antwort
     if (text.toUpperCase().startsWith('NOTIZ:')) {
       await _createNoteFromAI(text.substring(6).trim());
       return;
@@ -181,34 +183,43 @@ class _ChatPageState extends State<ChatPage> {
             top: false,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-              child: Row(
-                children: <Widget>[
-                  Expanded(
-                    child: TextField(
-                      controller: _input,
-                      onSubmitted: (_) => _send(),
-                      minLines: 1,
-                      maxLines: 6,
-                      decoration: InputDecoration(
-                        hintText: 'Nachricht eingeben…',
-                        filled: true,
-                        fillColor: Colors.grey.shade100,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide.none,
+              child: RawKeyboardListener(
+                focusNode: _focusNode,
+                onKey: (event) {
+                  if (event is RawKeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.enter &&
+                      !event.isShiftPressed) {
+                    _send();
+                  }
+                },
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: TextField(
+                        controller: _input,
+                        minLines: 1,
+                        maxLines: 6,
+                        decoration: InputDecoration(
+                          hintText: 'Nachricht eingeben…',
+                          filled: true,
+                          fillColor: Colors.grey.shade100,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(24),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  FloatingActionButton.small(
-                    heroTag: 'send',
-                    onPressed: _busy ? null : _send,
-                    child: const Icon(Icons.send),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    FloatingActionButton.small(
+                      heroTag: 'send',
+                      onPressed: _busy ? null : _send,
+                      child: const Icon(Icons.send),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

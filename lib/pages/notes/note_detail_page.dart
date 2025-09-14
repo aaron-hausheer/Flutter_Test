@@ -244,25 +244,27 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
     }
   }
 
-  Future<void> _save() async {
-    final String t = _titleCtrl.text.trim();
-    final String c = _contentCtrl.text.trim();
-    setState(() => _saving = true);
-    try {
-      await _notes.update(widget.note.id, t, c, groupId: _groupId);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gespeichert')),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Fehler: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+Future<void> _save() async {
+  final String t = _titleCtrl.text.trim();
+  final String c = _contentCtrl.text.trim();
+  setState(() => _saving = true);
+  try {
+    await _notes.update(widget.note.id, t, c, groupId: _groupId);
+    if (!mounted) return;
+
+    Navigator.of(context).pop(); // 👈 zurück zur Home-Seite
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Notiz erfolgreich gespeichert')),
+    );
+  } catch (e) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Fehler: $e')),
+    );
+  } finally {
+    if (mounted) setState(() => _saving = false);
   }
+}
 
   Future<void> _moveToTrash() async {
     final bool? ok = await showDialog<bool>(
@@ -345,41 +347,60 @@ class _NoteDetailPageState extends State<NoteDetailPage> {
             : const Icon(Icons.check),
         label: const Text('Speichern'),
       ),
-      body: FutureBuilder<List<Group>>(
-        future: _loadGroups(),
-        builder: (BuildContext context, AsyncSnapshot<List<Group>> snap) {
-          final List<Group> groups = snap.data ?? const <Group>[];
+     body: FutureBuilder<List<Group>>(
+      future: _loadGroups(),
+      builder: (BuildContext context, AsyncSnapshot<List<Group>> snap) {
+        if (snap.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snap.hasError) {
+          return Center(child: Text('Fehler beim Laden: ${snap.error}'));
+        }
 
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: ListView(
-              children: <Widget>[
-                TextField(
-                  controller: _titleCtrl,
-                  decoration: const InputDecoration(labelText: 'Titel'),
-                  textInputAction: TextInputAction.next,
-                  readOnly: inTrash,
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<int?>(
-                  value: _groupId,
-                  items: <DropdownMenuItem<int?>>[
-                    const DropdownMenuItem<int?>(value: null, child: Text('Keine Gruppe')),
-                    ...groups.map((Group g) => DropdownMenuItem<int?>(value: g.id, child: Text(g.name))),
-                  ],
-                  onChanged: inTrash ? null : (int? v) => setState(() => _groupId = v),
-                  decoration: const InputDecoration(labelText: 'Gruppe'),
-                ),
-                const SizedBox(height: 12),
-                Text(_formatDate(widget.note.createdAt), style: Theme.of(context).textTheme.bodySmall),
-                const Divider(height: 24),
-                TextField(
-                  controller: _contentCtrl,
-                  decoration: const InputDecoration(labelText: 'Inhalt'),
-                  maxLines: 12,
-                  readOnly: inTrash,
-                ),
+        final List<Group> groups = snap.data ?? const <Group>[];
+        final bool inTrash = widget.note.deletedAt != null;
 
+        return Padding(
+          padding: const EdgeInsets.all(16),
+          child: ListView(
+            children: <Widget>[
+              TextField(
+                controller: _titleCtrl,
+                decoration: const InputDecoration(labelText: 'Titel'),
+                textInputAction: TextInputAction.next,
+                readOnly: inTrash,
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int?>(
+                value: _groupId,
+                items: <DropdownMenuItem<int?>>[
+                  const DropdownMenuItem<int?>(
+                    value: null,
+                    child: Text('Keine Gruppe'),
+                  ),
+                  ...groups.map(
+                    (Group g) => DropdownMenuItem<int?>(
+                      value: g.id,
+                      child: Text(g.name),
+                    ),
+                  ),
+                ],
+                onChanged:
+                    inTrash ? null : (int? v) => setState(() => _groupId = v),
+                decoration: const InputDecoration(labelText: 'Gruppe'),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _formatDate(widget.note.createdAt),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const Divider(height: 24),
+              TextField(
+                controller: _contentCtrl,
+                decoration: const InputDecoration(labelText: 'Inhalt'),
+                maxLines: 12,
+                readOnly: inTrash,
+              ),
                 // -------------------- Tags section --------------------
                 const SizedBox(height: 16),
                 Row(
