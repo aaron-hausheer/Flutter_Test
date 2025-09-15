@@ -5,6 +5,34 @@ Das Ziel der App ist die einfache und schnelle Verwaltung von Notizen. Nutzerinn
 
 ---
 
+## Vorgehen
+Am Anfang habe ich mir überlegt, wie die App ungefähr aussehen soll und was sie können muss.
+Um die Struktur zu planen, habe ich ein Wireframe gezeichnet. Damit konnte ich schon grob sehen, wie die Navigation und die Seiten aufgebaut sind.
+Danach habe ich ein paar Mockups erstellt, um Farben, Icons und das Layout der Sticky Notes festzulegen.
+Als ich das Design grob stehen hatte, habe ich Schritt für Schritt die Funktionen eingebaut: zuerst Login/Registrierung, dann Notizen erstellen und bearbeiten, danach Gruppen und Tags, Favoriten und Papierkorb.
+Zum Schluss habe ich die Admin-Seiten und den AI-Chat eingebaut.
+
+## Begründung
+Ich habe bewusst zuerst einfache Skizzen und Mockups gemacht, bevor ich mit dem Coden angefangen habe.
+So konnte ich viele Designentscheidungen früh treffen und musste mich später beim Programmieren nicht ständig fragen, wie es aussehen soll.
+Das hat den Prozess viel effizienter gemacht, weil ich mich dann voll auf die Funktionen konzentrieren konnte.
+
+---
+
+## Design
+Das Design habe ich bewusst einfach und hell gehalten, damit die Inhalte im Vordergrund stehen.
+Die Sticky Notes erinnern an Post-its und machen die Notizen visuell angenehmer.
+Jede Gruppe hat eine eigene Farbe, damit man schnell den Überblick behält.
+Mit Icons und Tooltips in der Navigation findet man sich schnell zurecht, auch wenn man die App zum ersten Mal benutzt.
+
+---
+
+## Navigation
+Die Navigation läuft hauptsächlich über das obere NavMenu, wo man alles Wichtige an einem Ort findet: neue Gruppen, Favoriten, Papierkorb, Chat, Sortierung und Einstellungen.
+Admins haben zusätzlich ein Burger-Menü mit eigenen Seiten (Benutzerverwaltung und Statistiken). Das Burger-Menü habe ich bewusst gewählt, damit die Admin-Funktionen klar getrennt sind.
+
+---
+
 ## Funktionen
 
 ### Notizen
@@ -56,20 +84,6 @@ Das Ziel der App ist die einfache und schnelle Verwaltung von Notizen. Nutzerinn
 #### Statistiken
 - Für Admins gibt es auch noch eine Statistik-Seite.  
 - Dort sehen sie aktuelle Statistiken wie die Anzahl Notizen, wann sie erstellt wurden, aktivste Nutzer, etc.
----
-
-## Design
-Ich habe beim Design darauf geachtet, dass die App übersichtlich und einfach zu bedienen ist.
-Die Farben sind bewusst eher dezent und hell gewählt, damit die Inhalte im Vordergrund stehen.
-Durch das Postit Design der Notizen, kann man die Notizen einfach unterscheiden und hat eine bessere User Experience.
-Dadurch das Gruppen eigene Farben haben, hat man schneller und besser Notizen auseinander halten und hat einen besseren Überlick.
-
----
-
-## Navigation
-Durch Tooltips und passende Icons hat man eine einach verständliche Navigation.
-Der grossteil der Navigation findet im NavMenu im Header der Seite statt. Dadurch hat man alles an einem Ort.
-Für Admins gibt es zusätzlich noch ein Burger Menu mit eigenen Seiten. Das Burger Menu ist gewählt damit man Admin von normalen Seiten unterscheiden kann und wenn noch mehr Seiten dazu kommt das NavMenu nicht zu vollgesopft aussieht.
 
 ---
 
@@ -82,14 +96,15 @@ Für Admins gibt es zusätzlich noch ein Burger Menu mit eigenen Seiten. Das Bur
 Shortcuts können je nach Betriebssystem und Browser Probleme machen!
 
 ---
+
 ## Seiten
 - Login/Registrieren
 - Dashboard
 - Detail / Edit
 - Einstellungen
 - Chatbot
-- Benutzerverwaltung
-- Statistiken
+- Benutzerverwaltung (Admin)
+- Statistiken (Admin)
 
 ---
 
@@ -101,24 +116,6 @@ Shortcuts können je nach Betriebssystem und Browser Probleme machen!
 ### User
 - **E-Mail:** user@gmail.com  
 - **Passwort:** User1234  
-
----
-
-## Zusätzliche Daten
-### Datenbank
-[supabase](https://supabase.com)
-
-### Deploy
-[firebase](https://firebase.com)
-
-### Website
-[notive.com](https://flutter-test-c2aca.web.app)
-
-
----
-
-## Vorgehen
-Als erstes habe ich mir überlegt was ich machen möchte. Dann habe ich ein Wireframe erstellt damit ich mir vorstellen konte wie es aussehen sollte. Danach habe ich weiter überlegt und Mockups zu ein paar Seiten gemacht, damit ich beim programmieren weniger Zeit brauche um mir ein Design zu überlegen. Als ich das hatte habe ich mal angefangen die ersten Seiten zu programmieren und dann Schritt für Schritt alle Funktionen einzubauen.
 
 ---
 
@@ -138,3 +135,21 @@ Als erstes habe ich mir überlegt was ich machen möchte. Dann habe ich ein Wire
 
 ### Burger Menu:
 ![Burger Menu](image-8.png)
+
+---
+
+## Zusätzliche Daten
+### Datenbank Tool
+[supabase](https://supabase.com)
+
+### Deploy Tool
+[firebase](https://firebase.com)
+
+### Wireframe Tool
+[wireframe](https://wireframe.cc)
+
+### Mockup Tool
+[balsamiq](https://balsamiq.cloud)
+
+### Website
+[notive.com](https://flutter-test-c2aca.web.app)
