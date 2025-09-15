@@ -124,14 +124,17 @@ Shortcuts können je nach Betriebssystem und Browser Probleme machen!
 ### Mockup
 
 Home:
-https://share.balsamiq.com/c/hJGANYUMqKZxqE75tcWYuW.jpg
-![Home](image-1.png)
+![Home](image-5.png)
+<!-- ![Home](image-1.png) -->
 
 Papierkorb:
-![Papierkorb](image-2.png)
+![Pepierkorb](image-6.png)
+<!-- ![Papierkorb](image-2.png) -->
 
 Favoriten:
-![Favoriten](image-3.png)
+![Favoriten](image-7.png)
+<!-- ![Favoriten](image-3.png) -->
 
 Burger Menu:
-![Burger Menu](image-4.png)
+![Burger Menu](image-8.png)
+<!-- ![Burger Menu](image-4.png) -->
