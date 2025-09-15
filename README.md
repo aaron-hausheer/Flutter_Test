@@ -12,6 +12,9 @@ Danach habe ich ein paar Mockups erstellt, um Farben, Icons und das Layout der S
 Als ich das Design grob stehen hatte, habe ich Schritt für Schritt die Funktionen eingebaut: zuerst Login/Registrierung, dann Notizen erstellen und bearbeiten, danach Gruppen und Tags, Favoriten und Papierkorb.
 Zum Schluss habe ich die Admin-Seiten und den AI-Chat eingebaut.
 
+## Design für Zielgruppe
+Die App ist vor allem für Leute gedacht, die viele Notizen machen müssen, sei es für Schule, Arbeit oder privat. Mir war wichtig, dass man alles schnell und einfach bedienen kann, ohne lange suchen zu müssen. Darum habe ich ein schlichtes Design gewählt, bei dem die Notizen wie Post-its aussehen und man durch Farben und Gruppen direkt den Überblick hat. Mit Favoriten kann man sich die wichtigsten Sachen markieren und durch den Chatbot sogar ganz einfach per Eingabe neue Notizen erstellen. So passt das Design genau zu dem Ziel, dass die App praktisch und übersichtlich ist.
+
 ## Begründung
 Ich habe bewusst zuerst einfache Skizzen und Mockups gemacht, bevor ich mit dem Coden angefangen habe.
 So konnte ich viele Designentscheidungen früh treffen und musste mich später beim Programmieren nicht ständig fragen, wie es aussehen soll.
