@@ -117,13 +117,14 @@ Shortcuts können je nach Betriebssystem und Browser Probleme machen!
 
 ---
 
-### Wirefram
+### Wireframe
 
 ![Wireframe](image.png)
 
 ### Mockup
 
 Home:
+https://share.balsamiq.com/c/hJGANYUMqKZxqE75tcWYuW.jpg
 ![Home](image-1.png)
 
 Papierkorb:

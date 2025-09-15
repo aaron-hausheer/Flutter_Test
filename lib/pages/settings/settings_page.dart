@@ -80,7 +80,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     key: _formKey,
                     child: TextFormField(
                       controller: _nameCtrl,
-                      decoration: const InputDecoration(labelText: 'Display Name'),
+                      decoration: const InputDecoration(labelText: 'Anzeige Name'),
                       validator: (String? v) {
                         if (v == null) return null;
                         if (v.length > 80) return 'Zu lang';
