@@ -117,24 +117,20 @@ Shortcuts können je nach Betriebssystem und Browser Probleme machen!
 
 ---
 
+## Wireframe / Mockup
+
 ### Wireframe
+![Wireframe](image-9.png)
+<!-- ![Wireframe](image.png) -->
 
-![Wireframe](image.png)
-
-### Mockup
-
-Home:
+### Home:
 ![Home](image-5.png)
-<!-- ![Home](image-1.png) -->
 
-Papierkorb:
+### Papierkorb:
 ![Pepierkorb](image-6.png)
-<!-- ![Papierkorb](image-2.png) -->
 
-Favoriten:
+### Favoriten:
 ![Favoriten](image-7.png)
-<!-- ![Favoriten](image-3.png) -->
 
-Burger Menu:
-![Burger Menu](image-8.png)
-<!-- ![Burger Menu](image-4.png) -->
+### Burger Menu:
+![Burger Menu](image-8.pnßg)
