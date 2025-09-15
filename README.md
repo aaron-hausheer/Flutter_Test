@@ -113,3 +113,24 @@ Shortcuts können je nach Betriebssystem und Browser Probleme machen!
 
 ### Website
 [notive.com](https://flutter-test-c2aca.web.app)
+
+
+---
+
+### Wirefram
+
+![Wireframe](image.png)
+
+### Mockup
+
+Home:
+![Home](image-1.png)
+
+Papierkorb:
+![Papierkorb](image-2.png)
+
+Favoriten:
+![Favoriten](image-3.png)
+
+Burger Menu:
+![Burger Menu](image-4.png)
