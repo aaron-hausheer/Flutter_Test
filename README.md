@@ -133,4 +133,4 @@ Shortcuts können je nach Betriebssystem und Browser Probleme machen!
 ![Favoriten](image-7.png)
 
 ### Burger Menu:
-![Burger Menu](image-8.pnßg)
+![Burger Menu](image-8.png)
