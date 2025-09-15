@@ -38,13 +38,13 @@ class _ChatPageState extends State<ChatPage> {
     String title = 'AI Notiz';
     String body = content;
 
-    if (content.toLowerCase().contains('title:') &&
-        content.toLowerCase().contains('description:')) {
-      final titlePart = RegExp(r'title:(.*?)description:', caseSensitive: false)
+    if (content.toLowerCase().contains('titel:') &&
+        content.toLowerCase().contains('beschreibung:')) {
+      final titlePart = RegExp(r'titel:(.*?)beschreibung:', caseSensitive: false)
           .firstMatch(content)
           ?.group(1)
           ?.trim();
-      final descPart = RegExp(r'description:(.*)', caseSensitive: false)
+      final descPart = RegExp(r'beschreibung:(.*)', caseSensitive: false)
           .firstMatch(content)
           ?.group(1)
           ?.trim();

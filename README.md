@@ -56,6 +56,8 @@ Admins haben zusätzlich ein Burger-Menü mit eigenen Seiten (Benutzerverwaltung
 - Wenn man mit "Notiz:" anfängt, wird eine Notiz mit allem was danach kommt erstellt.
 - Wenn man nach "Notiz:" noch "titel:" und "beschreibung:" schreibt, kann man nach dem doppelpunkt noch sagen was Titel und was Beschreibung sein soll.
 
+Der Key deaktiviert sich manchmal von selber. Kann daher zu einem Error kommen.
+
 ### Sortierung
 - Man kann seine Notizen auf verschiedene Arten anzeigen lassen.  
 - Standardmäßig werden einfach alle angezeigt.  
@@ -74,6 +76,7 @@ Admins haben zusätzlich ein Burger-Menü mit eigenen Seiten (Benutzerverwaltung
 - Admins haben außerdem noch ein Burger-Menü, mit welchem sie auf die beiden Admin-Seiten gelangen.
 
 ---
+
 ## Admin Funktionen
 
 #### Benutzerverwaltung
@@ -105,6 +108,21 @@ Shortcuts können je nach Betriebssystem und Browser Probleme machen!
 - Chatbot
 - Benutzerverwaltung (Admin)
 - Statistiken (Admin)
+
+---
+
+## Ordnerstruktur
+lib/
+ ├─ auth/
+ ├─ core/
+ ├─ models/
+ ├─ pages/
+ │   ├─ admin/
+ │   ├─ chat/
+ │   ├─ notes/
+ │   └─ settings/
+ ├─ services/
+ └─ widgets/
 
 ---
 
