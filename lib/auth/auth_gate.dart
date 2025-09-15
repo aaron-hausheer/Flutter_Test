@@ -118,7 +118,7 @@ class _LoginPageState extends State<_LoginPage> {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: TextFormField(
                         controller: _displayNameCtrl,
-                        decoration: const InputDecoration(labelText: 'Display Name', prefixIcon: Icon(Icons.person)),
+                        decoration: const InputDecoration(labelText: 'Anzeigename', prefixIcon: Icon(Icons.person)),
                         validator: (String? v) {
                           if (_isLogin) return null;
                           if (v == null || v.trim().isEmpty) return 'Pflichtfeld';
