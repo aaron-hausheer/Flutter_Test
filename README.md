@@ -117,11 +117,15 @@ Shortcuts können je nach Betriebssystem und Browser Probleme machen!
 
 ---
 
+## Vorgehen
+Als erstes habe ich mir überlegt was ich machen möchte. Dann habe ich ein Wireframe erstellt damit ich mir vorstellen konte wie es aussehen sollte. Danach habe ich weiter überlegt und Mockups zu ein paar Seiten gemacht, damit ich beim programmieren weniger Zeit brauche um mir ein Design zu überlegen. Als ich das hatte habe ich mal angefangen die ersten Seiten zu programmieren und dann Schritt für Schritt alle Funktionen einzubauen.
+
+---
+
 ## Wireframe / Mockup
 
 ### Wireframe
 ![Wireframe](image-9.png)
-<!-- ![Wireframe](image.png) -->
 
 ### Home:
 ![Home](image-5.png)
